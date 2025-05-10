@@ -12,7 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
 import { db } from '@/lib/firebase'; // Assuming firebase storage is also exported or handled elsewhere for image uploads
-import { addDoc, collection, query, where, getDocs, serverTimestamp, Timestamp } from 'firebase/firestore';
+import { addDoc, collection, query, where, getDocs, serverTimestamp, Timestamp, updateDoc, doc } from 'firebase/firestore';
 // import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'; // For image uploads
 import { useSearchParams } from 'next/navigation';
 import React, { useEffect, useState, useRef } from 'react';
@@ -57,7 +57,7 @@ export default function StudentManagement() {
 
   const form = useForm<z.infer<typeof studentFormSchema>>({
     resolver: zodResolver(studentFormSchema),
-    defaultValues: { studentIdNo: '', name: '', course: '', year: undefined, section: '' },
+    defaultValues: { studentIdNo: '', name: '', course: '', year: '' as unknown as number, section: '' },
   });
   
   useEffect(() => {
@@ -91,10 +91,12 @@ export default function StudentManagement() {
     setIsSubmitting(true);
     try {
       const studentData: Omit<Student, 'id' | 'createdAt' | 'imageUrl' | 'faceData'> & { createdAt: any } = {
-        ...values,
-        instituteId,
-        year: values.year || undefined,
+        studentIdNo: values.studentIdNo,
+        name: values.name,
+        course: values.course,
+        year: values.year ? Number(values.year) : undefined,
         section: values.section || undefined,
+        instituteId,
         createdAt: serverTimestamp(),
       };
       await addDoc(collection(db, 'students'), studentData);
@@ -121,14 +123,14 @@ export default function StudentManagement() {
     try {
         // await uploadBytes(storageRef, imageFile);
         // const downloadURL = await getDownloadURL(storageRef);
-        // await updateDoc(doc(db, "students", selectedStudentForImage.id), { imageUrl: downloadURL });
         
         // SIMULATING UPLOAD
         await new Promise(resolve => setTimeout(resolve, 1500)); 
         const simulatedDownloadURL = `https://picsum.photos/seed/${selectedStudentForImage.id}/200/200`; // Placeholder URL
 
-        // Update Firestore (this part should be uncommented when storage is set up)
-        // await updateDoc(doc(db, "students", selectedStudentForImage.id), { imageUrl: simulatedDownloadURL });
+        // Update Firestore
+        const studentDocRef = doc(db, "students", selectedStudentForImage.id);
+        await updateDoc(studentDocRef, { imageUrl: simulatedDownloadURL });
 
 
         toast({ title: "Image Uploaded", description: `Image for ${selectedStudentForImage.name} updated.` });
@@ -179,7 +181,7 @@ export default function StudentManagement() {
                 <FormField control={form.control} name="studentIdNo" render={({ field }) => (<FormItem><FormLabel>Student ID No.</FormLabel><FormControl><Input placeholder="e.g., S1001" {...field} /></FormControl><FormMessage /></FormItem>)} />
                 <FormField control={form.control} name="name" render={({ field }) => (<FormItem><FormLabel>Full Name</FormLabel><FormControl><Input placeholder="Jane Smith" {...field} /></FormControl><FormMessage /></FormItem>)} />
                 <FormField control={form.control} name="course" render={({ field }) => (<FormItem><FormLabel>Course</FormLabel><FormControl><Input placeholder="B.Sc. Computer Science" {...field} /></FormControl><FormMessage /></FormItem>)} />
-                <FormField control={form.control} name="year" render={({ field }) => (<FormItem><FormLabel>Year (Optional)</FormLabel><FormControl><Input type="number" placeholder="e.g., 1" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                <FormField control={form.control} name="year" render={({ field }) => (<FormItem><FormLabel>Year (Optional)</FormLabel><FormControl><Input type="number" placeholder="e.g., 1" {...field} onChange={e => field.onChange(e.target.value === '' ? '' : Number(e.target.value))} /></FormControl><FormMessage /></FormItem>)} />
                 <FormField control={form.control} name="section" render={({ field }) => (<FormItem><FormLabel>Section (Optional)</FormLabel><FormControl><Input placeholder="e.g., A" {...field} /></FormControl><FormMessage /></FormItem>)} />
                 <Button type="submit" className="w-full" disabled={isSubmitting}>{isSubmitting ? 'Adding...' : 'Add Student'}</Button>
                 </form>
@@ -218,7 +220,7 @@ export default function StudentManagement() {
                     <TableCell>{student.year || 'N/A'}</TableCell>
                     <TableCell>{student.section || 'N/A'}</TableCell>
                     <TableCell className="text-right space-x-1">
-                        <Dialog>
+                        <Dialog onOpenChange={(open) => { if(!open) {setSelectedStudentForImage(null); setImageFile(null); if(imageInputRef.current) imageInputRef.current.value = "";} }}>
                             <DialogTrigger asChild>
                                 <Button variant="outline" size="icon" onClick={() => setSelectedStudentForImage(student)}>
                                     <UploadCloud className="h-4 w-4" />
@@ -253,3 +255,4 @@ export default function StudentManagement() {
     </div>
   );
 }
+

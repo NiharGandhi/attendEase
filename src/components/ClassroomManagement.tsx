@@ -40,7 +40,7 @@ export default function ClassroomManagement() {
     defaultValues: {
       roomNumber: '',
       section: '',
-      capacity: undefined,
+      capacity: '' as unknown as number, // Ensure it's not undefined
     },
   });
 
@@ -82,9 +82,10 @@ export default function ClassroomManagement() {
     setIsSubmitting(true);
     try {
       const classroomData: Omit<Classroom, 'id' | 'createdAt'> & { createdAt: any } = {
-        ...values,
+        roomNumber: values.roomNumber,
+        section: values.section,
+        capacity: values.capacity ? Number(values.capacity) : 0, // Ensure capacity is a number
         instituteId,
-        capacity: values.capacity || 0, // Ensure capacity is a number
         createdAt: serverTimestamp(),
       };
       await addDoc(collection(db, 'classrooms'), classroomData);
@@ -148,7 +149,7 @@ export default function ClassroomManagement() {
                         render={({ field }) => (
                         <FormItem>
                             <FormLabel>Capacity (Optional)</FormLabel>
-                            <FormControl><Input type="number" placeholder="e.g., 50" {...field} /></FormControl>
+                            <FormControl><Input type="number" placeholder="e.g., 50" {...field} onChange={e => field.onChange(e.target.value === '' ? '' : Number(e.target.value))} /></FormControl>
                             <FormMessage />
                         </FormItem>
                         )}
