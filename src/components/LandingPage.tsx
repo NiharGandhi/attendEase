@@ -3,10 +3,10 @@
 
 import React from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { CheckSquare, Users, ShieldCheck, BarChartBig, ArrowRight } from 'lucide-react';
-// import Link from 'next/link'; // Will be used when /register page is created
 
 const features = [
   {
@@ -40,19 +40,19 @@ export default function LandingPage() {
 
   return (
     <div className="flex flex-col min-h-screen bg-gradient-to-b from-background to-secondary/30">
-      {/* Header - Placeholder for potential future Navbar */}
       <header className="py-4 px-6 shadow-sm bg-background/80 backdrop-blur-md sticky top-0 z-50">
         <div className="container mx-auto flex justify-between items-center">
-          <h1 className="text-2xl font-bold text-primary">AttendEase</h1>
-          {/* <Link href="/register" passHref> */}
+          <Link href="/" passHref>
+            <h1 className="text-2xl font-bold text-primary cursor-pointer">AttendEase</h1>
+          </Link>
+          <Link href="/register" passHref>
             <Button variant="outline">
               Register Institute <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
-          {/* </Link> */}
+          </Link>
         </div>
       </header>
 
-      {/* Hero Section */}
       <main className="flex-grow">
         <section className="py-16 md:py-24 bg-secondary/50">
           <div className="container mx-auto px-6 text-center">
@@ -64,18 +64,18 @@ export default function LandingPage() {
                 <p className="text-lg md:text-xl text-foreground mb-8">
                   Leverage the power of facial recognition for seamless university attendance tracking. Register your institute and transform your attendance management.
                 </p>
-                {/* <Link href="/register" passHref> */}
+                <Link href="/register" passHref>
                   <Button size="lg" className="bg-accent hover:bg-accent/90 text-accent-foreground">
                     Get Started Today <ArrowRight className="ml-2 h-5 w-5" />
                   </Button>
-                {/* </Link> */}
+                </Link>
               </div>
               <div className="relative aspect-video rounded-lg overflow-hidden shadow-2xl">
                 <Image
                   src="https://picsum.photos/600/400"
                   alt="Smart attendance system illustration"
-                  layout="fill"
-                  objectFit="cover"
+                  fill
+                  style={{objectFit:"cover"}}
                   data-ai-hint="classroom technology"
                   priority
                 />
@@ -85,7 +85,6 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* Features Section */}
         <section id="features" className="py-16 md:py-24">
           <div className="container mx-auto px-6">
             <h3 className="text-3xl font-bold text-primary text-center mb-12">
@@ -93,7 +92,7 @@ export default function LandingPage() {
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
               {features.map((feature, index) => (
-                <Card key={index} className="shadow-lg hover:shadow-xl transition-shadow duration-300 bg-background">
+                <Card key={index} className="shadow-lg hover:shadow-xl transition-shadow duration-300 bg-card">
                   <CardHeader className="items-center text-center">
                     {feature.icon}
                     <CardTitle className="mt-4 text-xl text-primary">{feature.title}</CardTitle>
@@ -108,7 +107,6 @@ export default function LandingPage() {
         </section>
       </main>
 
-      {/* Footer */}
       <footer className="py-8 bg-primary text-primary-foreground">
         <div className="container mx-auto px-6 text-center">
           <p>&copy; {currentYear !== null ? currentYear : 'Loading...'} AttendEase. All rights reserved.</p>

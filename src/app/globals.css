@@ -8,7 +8,7 @@ body {
 
 @layer base {
   :root {
-    --background: 0 0% 100%; /* Light Gray for backgrounds - slightly adjusted for better contrast */
+    --background: 0 0% 84%; /* Light Gray (#D6D6D6) */
     --foreground: 207 100% 14%; /* Deep Blue for text */
 
     --muted: 0 0% 96.1%;
@@ -20,16 +20,16 @@ body {
     --card: 0 0% 100%;
     --card-foreground: 207 100% 14%;
 
-    --border: 0 0% 89.8%;
-    --input: 0 0% 89.8%;
+    --border: 0 0% 80%; /* Adjusted border for new background */
+    --input: 0 0% 80%; /* Adjusted input for new background */
 
-    --primary: 207 100% 14%; /* Deep Blue */
+    --primary: 207 100% 14%; /* Deep Blue (#003049) */
     --primary-foreground: 0 0% 98%; /* Light text on Deep Blue */
 
-    --secondary: 0 0% 91%; /* Light Gray - adjusted from D6D6D6 for better compatibility */
+    --secondary: 0 0% 84%; /* Light Gray (#D6D6D6) */
     --secondary-foreground: 207 100% 14%; /* Deep Blue text on Light Gray */
 
-    --accent: 174 72% 56%; /* Teal */
+    --accent: 174 72% 56%; /* Teal (#40E0D0) */
     --accent-foreground: 207 100% 14%; /* Deep Blue text on Teal */
 
     --destructive: 0 84.2% 60.2%;
