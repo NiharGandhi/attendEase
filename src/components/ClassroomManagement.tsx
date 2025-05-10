@@ -1,4 +1,3 @@
-
 "use client";
 
 import type { Classroom, ClassroomFormData } from '@/lib/types';
@@ -40,7 +39,7 @@ export default function ClassroomManagement() {
     defaultValues: {
       roomNumber: '',
       section: '',
-      capacity: '' as unknown as number, // Ensure it's not undefined
+      capacity: undefined, 
     },
   });
 
@@ -84,7 +83,7 @@ export default function ClassroomManagement() {
       const classroomData: Omit<Classroom, 'id' | 'createdAt'> & { createdAt: any } = {
         roomNumber: values.roomNumber,
         section: values.section,
-        capacity: values.capacity ? Number(values.capacity) : 0, // Ensure capacity is a number
+        capacity: values.capacity ? Number(values.capacity) : undefined, // Ensure capacity is a number or undefined
         instituteId,
         createdAt: serverTimestamp(),
       };
@@ -149,7 +148,18 @@ export default function ClassroomManagement() {
                         render={({ field }) => (
                         <FormItem>
                             <FormLabel>Capacity (Optional)</FormLabel>
-                            <FormControl><Input type="number" placeholder="e.g., 50" {...field} onChange={e => field.onChange(e.target.value === '' ? '' : Number(e.target.value))} /></FormControl>
+                            <FormControl>
+                                <Input 
+                                    type="number" 
+                                    placeholder="e.g., 50" 
+                                    {...field} 
+                                    value={field.value ?? ''}
+                                    onChange={e => {
+                                        const val = e.target.value;
+                                        field.onChange(val === '' ? undefined : Number(val));
+                                    }}
+                                />
+                            </FormControl>
                             <FormMessage />
                         </FormItem>
                         )}
