@@ -56,3 +56,6 @@ export type InstituteFormData = Omit<Institute, 'id' | 'createdAt'>;
 export type EmployeeFormData = Omit<Employee, 'id' | 'instituteId' | 'createdAt'>;
 export type ClassroomFormData = Omit<Classroom, 'id' | 'instituteId' | 'createdAt'>;
 export type StudentFormData = Omit<Student, 'id' | 'instituteId' | 'imageUrl' | 'faceData' | 'createdAt'>;
+
+export type LoginFormData = z.infer<typeof import('@/components/LoginForm').loginFormSchema>;
+import { z } from 'zod'; // Added to make the above line work, assuming LoginForm will export schema

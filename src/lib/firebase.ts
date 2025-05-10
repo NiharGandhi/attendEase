@@ -1,5 +1,6 @@
 
 import { initializeApp, getApps, type FirebaseApp } from 'firebase/app';
+import { getAuth, type Auth } from 'firebase/auth'; // Added Auth import
 import { getFirestore, type Firestore } from 'firebase/firestore';
 // import { getStorage, type FirebaseStorage } from 'firebase/storage'; // For future use with image uploads
 
@@ -14,6 +15,7 @@ const firebaseConfig = {
 
 let app: FirebaseApp;
 let db: Firestore;
+let auth: Auth; // Added Auth variable
 // let storage: FirebaseStorage;
 
 if (!getApps().length) {
@@ -23,6 +25,7 @@ if (!getApps().length) {
 }
 
 db = getFirestore(app);
+auth = getAuth(app); // Initialize Auth
 // storage = getStorage(app); // For future use
 
-export { app, db /*, storage */ };
+export { app, db, auth /*, storage */ };

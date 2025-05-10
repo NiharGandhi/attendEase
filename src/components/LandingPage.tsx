@@ -6,7 +6,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { CheckSquare, Users, ShieldCheck, BarChartBig, ArrowRight } from 'lucide-react';
+import { CheckSquare, Users, ShieldCheck, BarChartBig, ArrowRight, LogIn } from 'lucide-react';
 
 const features = [
   {
@@ -45,11 +45,18 @@ export default function LandingPage() {
           <Link href="/" passHref>
             <h1 className="text-2xl font-bold text-primary cursor-pointer">AttendEase</h1>
           </Link>
-          <Link href="/register" passHref>
-            <Button variant="outline">
-              Register Institute <ArrowRight className="ml-2 h-4 w-4" />
-            </Button>
-          </Link>
+          <nav className="flex items-center gap-4">
+            <Link href="/login" passHref>
+              <Button variant="ghost">
+                <LogIn className="mr-2 h-4 w-4" /> Login
+              </Button>
+            </Link>
+            <Link href="/register" passHref>
+              <Button variant="outline" className="bg-accent hover:bg-accent/90 text-accent-foreground border-accent hover:border-accent/90">
+                Register Institute
+              </Button>
+            </Link>
+          </nav>
         </div>
       </header>
 
@@ -65,7 +72,7 @@ export default function LandingPage() {
                   Leverage the power of facial recognition for seamless university attendance tracking. Register your institute and transform your attendance management.
                 </p>
                 <Link href="/register" passHref>
-                  <Button size="lg" className="bg-accent hover:bg-accent/90 text-accent-foreground">
+                  <Button size="lg" className="bg-primary hover:bg-primary/90 text-primary-foreground">
                     Get Started Today <ArrowRight className="ml-2 h-5 w-5" />
                   </Button>
                 </Link>

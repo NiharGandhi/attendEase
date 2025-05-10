@@ -12,12 +12,19 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
-import { db } from '@/lib/firebase';
+import { db, auth } from '@/lib/firebase'; // auth imported
+// createUserWithEmailAndPassword can be used if we want to create auth users here
+// For now, we'll just store an email that could be used for an Auth account.
 import { addDoc, collection, query, where, getDocs, serverTimestamp, Timestamp } from 'firebase/firestore';
 import { useSearchParams } from 'next/navigation';
 import React, { useEffect, useState } from 'react';
 import { FileUp, PlusCircle, Trash2 } from 'lucide-react';
 
+// Note: Password field is not included here for simplicity. 
+// Creating users with passwords securely requires more UI/UX.
+// This form assumes an admin might create a placeholder record,
+// and the user would later set/reset their password through a different flow
+// or be invited.
 const employeeFormSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters." }),
   email: z.string().email({ message: "Invalid email address." }),
@@ -81,19 +88,32 @@ export default function EmployeeManagement() {
     }
     setIsSubmitting(true);
     try {
-      const employeeData: Omit<Employee, 'id' | 'createdAt'> & { createdAt: any } = {
+      // Future: Optionally create a Firebase Auth user here.
+      // For now, just creates the Firestore record.
+      // If creating Auth user:
+      // const userCredential = await createUserWithEmailAndPassword(auth, values.email, "defaultPassword123"); // Handle password securely!
+      // const firebaseUid = userCredential.user.uid;
+
+      const employeeData: Omit<Employee, 'id' | 'createdAt'> & { createdAt: any; firebaseUid?: string } = {
         ...values,
         instituteId,
         createdAt: serverTimestamp(),
+        // firebaseUid: firebaseUid, // If auth user created
       };
       await addDoc(collection(db, 'employees'), employeeData);
       toast({ title: 'Employee Added', description: `${values.name} has been added successfully.` });
       form.reset();
       setShowAddForm(false);
       fetchEmployees(); // Refresh list
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error adding employee:', error);
-      toast({ variant: 'destructive', title: 'Error', description: 'Failed to add employee.' });
+      let desc = 'Failed to add employee.';
+      if (error.code === 'auth/email-already-in-use') {
+        desc = 'This email is already in use by another authenticated account.';
+      } else if (error.code === 'auth/weak-password') {
+        desc = 'The password provided is too weak.';
+      }
+      toast({ variant: 'destructive', title: 'Error', description: desc });
     } finally {
       setIsSubmitting(false);
     }
@@ -168,6 +188,20 @@ export default function EmployeeManagement() {
                     </FormItem>
                     )}
                 />
+                {/* 
+                Future: Add password field if creating Auth user directly here
+                <FormField
+                    control={form.control}
+                    name="password" // Add to schema if used
+                    render={({ field }) => (
+                    <FormItem>
+                        <FormLabel>Password (temporary)</FormLabel>
+                        <FormControl><Input type="password" placeholder="Min. 6 characters" {...field} /></FormControl>
+                        <FormMessage />
+                    </FormItem>
+                    )}
+                /> 
+                */}
                 <Button type="submit" className="w-full" disabled={isSubmitting}>
                     {isSubmitting ? 'Adding...' : 'Add Employee'}
                 </Button>
