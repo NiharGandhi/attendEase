@@ -1,5 +1,5 @@
-import AttendEaseClientPage from '@/components/AttendEaseClientPage';
+import LandingPage from '@/components/LandingPage';
 
 export default function HomePage() {
-  return <AttendEaseClientPage />;
+  return <LandingPage />;
 }

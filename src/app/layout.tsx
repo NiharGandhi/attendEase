@@ -9,8 +9,8 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: 'AttendEase - University Face Recognition Attendance',
-  description: 'A real-time attendance system using facial recognition.',
+  title: 'AttendEase - Smart University Attendance',
+  description: 'Automated attendance tracking using facial recognition for educational institutions.',
 };
 
 export default function RootLayout({
