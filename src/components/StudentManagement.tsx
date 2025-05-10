@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { Student, StudentFormData } from '@/lib/types';
@@ -10,8 +11,9 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
-import { db } from '@/lib/firebase'; 
+import { db, storage } from '@/lib/firebase'; 
 import { addDoc, collection, query, where, getDocs, serverTimestamp, Timestamp, updateDoc, doc, getDoc } from 'firebase/firestore';
+import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { useSearchParams } from 'next/navigation';
 import React, { useEffect, useState, useRef } from 'react';
 import { FileUp, PlusCircle, UploadCloud, Trash2, UserCircle2, AlertTriangle } from 'lucide-react';
@@ -134,17 +136,16 @@ export default function StudentManagement() {
 
     setIsUploadingImage(true);
     
-    // SIMULATING Firebase Storage UPLOAD
-    // In a real app, replace this with actual Firebase Storage upload:
-    // const filePath = `institutes/${instituteId}/students/${selectedStudentForImage.id}/${imageFile.name}`;
-    // const storageRef = ref(storage, filePath); // Assuming 'storage' is exported from firebase config
-    // await uploadBytes(storageRef, imageFile);
-    // const downloadURL = await getDownloadURL(storageRef);
-    const simulatedDownloadURL = `https://picsum.photos/seed/${selectedStudentForImage.id}-${Date.now()}/200/200`; // Placeholder URL, ensure it changes to re-trigger effects if any
-
+    let downloadURL = '';
     try {
-        // 1. Detect face in the uploaded image
-        const detectResult = await detectFaceAction(simulatedDownloadURL); // Use actual downloadURL here
+        // 1. Upload image to Firebase Storage
+        const filePath = `institutes/${instituteId}/students/${selectedStudentForImage.id}/${imageFile.name}`;
+        const imageStorageRef = storageRef(storage, filePath);
+        await uploadBytes(imageStorageRef, imageFile);
+        downloadURL = await getDownloadURL(imageStorageRef);
+
+        // 2. Detect face in the uploaded image using the public URL from Firebase Storage
+        const detectResult = await detectFaceAction(downloadURL); 
         if (!detectResult.success || !detectResult.faceToken) {
             toast({ variant: "destructive", title: "Face Detection Failed", description: detectResult.error || "Could not detect a face in the uploaded image." });
             setIsUploadingImage(false);
@@ -152,7 +153,7 @@ export default function StudentManagement() {
         }
         const { faceToken: newFaceToken } = detectResult;
 
-        // 2. Add detected face to the institute's FaceSet
+        // 3. Add detected face to the institute's FaceSet
         const addFaceResult = await addFaceToFaceSetAction(instituteFacesetToken, newFaceToken);
         if (!addFaceResult.success) {
             toast({ variant: "destructive", title: "Face Registration Failed", description: addFaceResult.error || "Could not add face to the institute's recognition set." });
@@ -160,10 +161,10 @@ export default function StudentManagement() {
             return;
         }
 
-        // 3. Update Firestore with image URL and new FaceToken
+        // 4. Update Firestore with image URL and new FaceToken
         const studentDocRef = doc(db, "students", selectedStudentForImage.id);
         await updateDoc(studentDocRef, { 
-            imageUrl: simulatedDownloadURL, // Use actual downloadURL
+            imageUrl: downloadURL,
             faceToken: newFaceToken 
         });
 
