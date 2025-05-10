@@ -9,12 +9,13 @@ import { Button } from '@/components/ui/button';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
-import { db, auth } from '@/lib/firebase'; // Import auth
-import { addDoc, collection, serverTimestamp, setDoc, doc } from 'firebase/firestore';
-import { createUserWithEmailAndPassword } from 'firebase/auth'; // Import createUser
-import { useRouter } from 'next/navigation'; 
+import { db, auth } from '@/lib/firebase';
+import { addDoc, collection, serverTimestamp, doc, updateDoc } from 'firebase/firestore';
+import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { useRouter } from 'next/navigation';
 import React from 'react';
-import Link from 'next/link'; // Import Link
+import Link from 'next/link';
+import { createFaceSetAction } from '@/actions/faceplusplus';
 
 const formSchema = z.object({
   name: z.string().min(2, { message: 'Institute name must be at least 2 characters.' }),
@@ -48,24 +49,43 @@ export default function RegisterInstituteForm() {
       const user = userCredential.user;
 
       // 2. Create the institute document in Firestore
-      const instituteData: Omit<InstituteFormData, 'adminPassword'> & { createdAt: any, adminUid?: string } = {
+      const instituteData: Omit<InstituteFormData, 'adminPassword'> & { createdAt: any, adminUid?: string, facesetToken?: string } = {
         name: values.name,
         address: values.address,
         contactEmail: values.contactEmail,
         contactPhone: values.contactPhone,
         createdAt: serverTimestamp(),
-        adminUid: user.uid, // Store admin UID
+        adminUid: user.uid, 
       };
       const instituteDocRef = await addDoc(collection(db, 'institutes'), instituteData);
       const instituteId = instituteDocRef.id;
 
-      // 3. Create an employee document for this admin user
+      // 3. Create Face++ FaceSet for this institute
+      const faceSetResult = await createFaceSetAction(instituteId, values.name);
+      if (!faceSetResult.success || !faceSetResult.facesetToken) {
+        // Note: Consider rollback or cleanup if FaceSet creation fails.
+        // For now, we'll toast an error but proceed with employee creation.
+        toast({
+          variant: 'destructive',
+          title: 'FaceSet Creation Failed',
+          description: faceSetResult.error || 'Could not create FaceSet for facial recognition.',
+        });
+      } else {
+         // Update institute doc with facesetToken (already done by createFaceSetAction if successful)
+        toast({
+          title: 'FaceSet Created',
+          description: `FaceSet for ${values.name} created successfully.`,
+        });
+      }
+
+
+      // 4. Create an employee document for this admin user
       const employeeData = {
         instituteId: instituteId,
-        name: "Admin " + values.name, // Or prompt for admin name
+        name: "Admin " + values.name, 
         email: values.contactEmail,
         role: 'admin',
-        firebaseUid: user.uid, // Link to Firebase Auth user
+        firebaseUid: user.uid,
         createdAt: serverTimestamp(),
       };
       await addDoc(collection(db, 'employees'), employeeData);

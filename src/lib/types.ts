@@ -1,5 +1,6 @@
 
 import type { Timestamp } from 'firebase/firestore';
+import { z } from 'zod'; // Added to make the LoginFormData work
 
 export interface Institute {
   id?: string; // Firestore document ID
@@ -8,6 +9,8 @@ export interface Institute {
   contactEmail: string;
   contactPhone: string;
   createdAt?: Timestamp;
+  adminUid?: string;
+  facesetToken?: string; // Face++ FaceSet Token
 }
 
 export interface Employee {
@@ -16,6 +19,7 @@ export interface Employee {
   name: string;
   email: string;
   role: string; // e.g., 'admin', 'teacher'
+  firebaseUid?: string; // Link to Firebase Auth user
   createdAt?: Timestamp;
 }
 
@@ -37,7 +41,7 @@ export interface Student {
   year?: number;
   section?: string;
   imageUrl?: string; // Link to image in Firebase Storage
-  faceData?: any; // Placeholder for Face++ data
+  faceToken?: string; // Face++ Face Token for this student's primary image
   createdAt?: Timestamp;
 }
 
@@ -49,13 +53,13 @@ export interface AttendanceRecord {
   timestamp: Timestamp;
   status: 'present' | 'absent';
   recognizedAt?: Timestamp; // Time of recognition
+  method?: 'manual' | 'facial_recognition'; // How attendance was marked
 }
 
 // Used for form validation
-export type InstituteFormData = Omit<Institute, 'id' | 'createdAt'>;
-export type EmployeeFormData = Omit<Employee, 'id' | 'instituteId' | 'createdAt'>;
+export type InstituteFormData = Omit<Institute, 'id' | 'createdAt' | 'adminUid' | 'facesetToken'> & { adminPassword?: string };
+export type EmployeeFormData = Omit<Employee, 'id' | 'instituteId' | 'createdAt' | 'firebaseUid'>;
 export type ClassroomFormData = Omit<Classroom, 'id' | 'instituteId' | 'createdAt'>;
-export type StudentFormData = Omit<Student, 'id' | 'instituteId' | 'imageUrl' | 'faceData' | 'createdAt'>;
+export type StudentFormData = Omit<Student, 'id' | 'instituteId' | 'imageUrl' | 'faceToken' | 'createdAt'>;
 
 export type LoginFormData = z.infer<typeof import('@/components/LoginForm').loginFormSchema>;
-import { z } from 'zod'; // Added to make the above line work, assuming LoginForm will export schema

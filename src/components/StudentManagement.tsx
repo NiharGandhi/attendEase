@@ -11,12 +11,11 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
-import { db } from '@/lib/firebase'; // Assuming firebase storage is also exported or handled elsewhere for image uploads
-import { addDoc, collection, query, where, getDocs, serverTimestamp, Timestamp, updateDoc, doc } from 'firebase/firestore';
-// import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'; // For image uploads
+import { db } from '@/lib/firebase'; 
+import { addDoc, collection, query, where, getDocs, serverTimestamp, Timestamp, updateDoc, doc, getDoc } from 'firebase/firestore';
 import { useSearchParams } from 'next/navigation';
 import React, { useEffect, useState, useRef } from 'react';
-import { FileUp, PlusCircle, UploadCloud, Trash2, UserCircle2 } from 'lucide-react';
+import { FileUp, PlusCircle, UploadCloud, Trash2, UserCircle2, AlertTriangle } from 'lucide-react';
 import Image from 'next/image';
 import {
   Dialog,
@@ -28,6 +27,8 @@ import {
   DialogFooter,
   DialogClose
 } from "@/components/ui/dialog"
+import { detectFaceAction, addFaceToFaceSetAction, getInstituteFacesetToken } from '@/actions/faceplusplus';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 
 const studentFormSchema = z.object({
@@ -53,11 +54,12 @@ export default function StudentManagement() {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const [instituteFacesetToken, setInstituteFacesetToken] = useState<string | null>(null);
 
 
   const form = useForm<z.infer<typeof studentFormSchema>>({
     resolver: zodResolver(studentFormSchema),
-    defaultValues: { studentIdNo: '', name: '', course: '', year: '' as unknown as number, section: '' },
+    defaultValues: { studentIdNo: '', name: '', course: '', year: undefined, section: '' },
   });
   
   useEffect(() => {
@@ -65,9 +67,18 @@ export default function StudentManagement() {
   }, [action]);
 
   useEffect(() => {
-    if (instituteId) fetchStudents();
+    if (instituteId) {
+      fetchStudents();
+      fetchFacesetToken();
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [instituteId]);
+
+  async function fetchFacesetToken() {
+    if (!instituteId) return;
+    const token = await getInstituteFacesetToken(instituteId);
+    setInstituteFacesetToken(token);
+  }
 
   async function fetchStudents() {
     if (!instituteId) return;
@@ -90,7 +101,7 @@ export default function StudentManagement() {
     }
     setIsSubmitting(true);
     try {
-      const studentData: Omit<Student, 'id' | 'createdAt' | 'imageUrl' | 'faceData'> & { createdAt: any } = {
+      const studentData: Omit<Student, 'id' | 'createdAt' | 'imageUrl' | 'faceToken'> & { createdAt: any } = {
         studentIdNo: values.studentIdNo,
         name: values.name,
         course: values.course,
@@ -112,36 +123,60 @@ export default function StudentManagement() {
   }
 
   const handleImageUpload = async () => {
-    if (!imageFile || !selectedStudentForImage || !selectedStudentForImage.id) {
-        toast({ variant: "destructive", title: "Upload Error", description: "No image selected or student invalid." });
+    if (!imageFile || !selectedStudentForImage || !selectedStudentForImage.id || !instituteId) {
+        toast({ variant: "destructive", title: "Upload Error", description: "No image, student, or institute ID." });
         return;
     }
+    if (!instituteFacesetToken) {
+        toast({ variant: "destructive", title: "Configuration Error", description: "Institute FaceSet token not found. Cannot process image for facial recognition." });
+        setIsUploadingImage(false);
+        return;
+    }
+
     setIsUploadingImage(true);
-    // Placeholder: Firebase Storage upload logic would go here
+    
+    // SIMULATING Firebase Storage UPLOAD
+    // In a real app, replace this with actual Firebase Storage upload:
     // const filePath = `institutes/${instituteId}/students/${selectedStudentForImage.id}/${imageFile.name}`;
-    // const storageRef = ref(storage, filePath);
+    // const storageRef = ref(storage, filePath); // Assuming 'storage' is exported from firebase config
+    // await uploadBytes(storageRef, imageFile);
+    // const downloadURL = await getDownloadURL(storageRef);
+    const simulatedDownloadURL = `https://picsum.photos/seed/${selectedStudentForImage.id}-${Date.now()}/200/200`; // Placeholder URL, ensure it changes to re-trigger effects if any
+
     try {
-        // await uploadBytes(storageRef, imageFile);
-        // const downloadURL = await getDownloadURL(storageRef);
-        
-        // SIMULATING UPLOAD
-        await new Promise(resolve => setTimeout(resolve, 1500)); 
-        const simulatedDownloadURL = `https://picsum.photos/seed/${selectedStudentForImage.id}/200/200`; // Placeholder URL
+        // 1. Detect face in the uploaded image
+        const detectResult = await detectFaceAction(simulatedDownloadURL); // Use actual downloadURL here
+        if (!detectResult.success || !detectResult.faceToken) {
+            toast({ variant: "destructive", title: "Face Detection Failed", description: detectResult.error || "Could not detect a face in the uploaded image." });
+            setIsUploadingImage(false);
+            return;
+        }
+        const { faceToken: newFaceToken } = detectResult;
 
-        // Update Firestore
+        // 2. Add detected face to the institute's FaceSet
+        const addFaceResult = await addFaceToFaceSetAction(instituteFacesetToken, newFaceToken);
+        if (!addFaceResult.success) {
+            toast({ variant: "destructive", title: "Face Registration Failed", description: addFaceResult.error || "Could not add face to the institute's recognition set." });
+            setIsUploadingImage(false);
+            return;
+        }
+
+        // 3. Update Firestore with image URL and new FaceToken
         const studentDocRef = doc(db, "students", selectedStudentForImage.id);
-        await updateDoc(studentDocRef, { imageUrl: simulatedDownloadURL });
+        await updateDoc(studentDocRef, { 
+            imageUrl: simulatedDownloadURL, // Use actual downloadURL
+            faceToken: newFaceToken 
+        });
 
-
-        toast({ title: "Image Uploaded", description: `Image for ${selectedStudentForImage.name} updated.` });
-        fetchStudents(); // Refresh student list to show new image
+        toast({ title: "Image Processed", description: `Image for ${selectedStudentForImage.name} uploaded and face registered.` });
+        fetchStudents(); 
         setImageFile(null);
         setSelectedStudentForImage(null);
         if(imageInputRef.current) imageInputRef.current.value = "";
 
-    } catch (error) {
-        console.error("Error uploading image: ", error);
-        toast({ variant: "destructive", title: "Upload Failed", description: "Could not upload image." });
+    } catch (error: any) {
+        console.error("Error uploading image and processing face: ", error);
+        toast({ variant: "destructive", title: "Upload Failed", description: error.message || "Could not upload image or process face." });
     } finally {
         setIsUploadingImage(false);
     }
@@ -160,6 +195,16 @@ export default function StudentManagement() {
 
   return (
     <div className="space-y-6">
+      {!instituteFacesetToken && (
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Facial Recognition Not Configured</AlertTitle>
+          <AlertDescription>
+            This institute does not have a FaceSet configured for facial recognition. 
+            Image uploads will not be processed for attendance. Please contact support or re-register the institute if this is an error.
+          </AlertDescription>
+        </Alert>
+      )}
       <Card className="shadow-xl">
         <CardHeader className="flex flex-row items-center justify-between">
             <div>
@@ -171,7 +216,7 @@ export default function StudentManagement() {
                     <PlusCircle className="mr-2 h-4 w-4" /> {showAddForm ? 'Cancel' : 'Add Student'}
                 </Button>
                 <Button variant="outline" onClick={handleBatchStudentUpload}> <FileUp className="mr-2 h-4 w-4" /> Batch Add Students </Button>
-                <Button variant="outline" onClick={handleBatchImageUpload}> <UploadCloud className="mr-2 h-4 w-4" /> Batch Upload Photos </Button>
+                <Button variant="outline" onClick={handleBatchImageUpload} disabled={!instituteFacesetToken}> <UploadCloud className="mr-2 h-4 w-4" /> Batch Upload Photos </Button>
             </div>
         </CardHeader>
         {showAddForm && (
@@ -181,7 +226,7 @@ export default function StudentManagement() {
                 <FormField control={form.control} name="studentIdNo" render={({ field }) => (<FormItem><FormLabel>Student ID No.</FormLabel><FormControl><Input placeholder="e.g., S1001" {...field} /></FormControl><FormMessage /></FormItem>)} />
                 <FormField control={form.control} name="name" render={({ field }) => (<FormItem><FormLabel>Full Name</FormLabel><FormControl><Input placeholder="Jane Smith" {...field} /></FormControl><FormMessage /></FormItem>)} />
                 <FormField control={form.control} name="course" render={({ field }) => (<FormItem><FormLabel>Course</FormLabel><FormControl><Input placeholder="B.Sc. Computer Science" {...field} /></FormControl><FormMessage /></FormItem>)} />
-                <FormField control={form.control} name="year" render={({ field }) => (<FormItem><FormLabel>Year (Optional)</FormLabel><FormControl><Input type="number" placeholder="e.g., 1" {...field} onChange={e => field.onChange(e.target.value === '' ? '' : Number(e.target.value))} /></FormControl><FormMessage /></FormItem>)} />
+                <FormField control={form.control} name="year" render={({ field }) => (<FormItem><FormLabel>Year (Optional)</FormLabel><FormControl><Input type="number" placeholder="e.g., 1" {...field} onChange={e => field.onChange(e.target.value === '' ? undefined : Number(e.target.value))} /></FormControl><FormMessage /></FormItem>)} />
                 <FormField control={form.control} name="section" render={({ field }) => (<FormItem><FormLabel>Section (Optional)</FormLabel><FormControl><Input placeholder="e.g., A" {...field} /></FormControl><FormMessage /></FormItem>)} />
                 <Button type="submit" className="w-full" disabled={isSubmitting}>{isSubmitting ? 'Adding...' : 'Add Student'}</Button>
                 </form>
@@ -203,6 +248,7 @@ export default function StudentManagement() {
                   <TableHead>Course</TableHead>
                   <TableHead>Year</TableHead>
                   <TableHead>Section</TableHead>
+                  <TableHead>Face Token Status</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -211,7 +257,7 @@ export default function StudentManagement() {
                   <TableRow key={student.id}>
                     <TableCell>
                       {student.imageUrl ? 
-                        <Image src={student.imageUrl} alt={student.name} width={40} height={40} className="rounded-full object-cover" data-ai-hint="student portrait" /> : 
+                        <Image src={student.imageUrl} alt={student.name} width={40} height={40} className="rounded-full object-cover" data-ai-hint="student portrait" unoptimized/> : 
                         <UserCircle2 className="h-10 w-10 text-muted-foreground" />}
                     </TableCell>
                     <TableCell>{student.studentIdNo}</TableCell>
@@ -219,29 +265,37 @@ export default function StudentManagement() {
                     <TableCell>{student.course}</TableCell>
                     <TableCell>{student.year || 'N/A'}</TableCell>
                     <TableCell>{student.section || 'N/A'}</TableCell>
+                    <TableCell>
+                      {student.faceToken ? 
+                        <span className="text-green-600">Registered</span> : 
+                        <span className="text-orange-500">Not Registered</span>}
+                    </TableCell>
                     <TableCell className="text-right space-x-1">
                         <Dialog onOpenChange={(open) => { if(!open) {setSelectedStudentForImage(null); setImageFile(null); if(imageInputRef.current) imageInputRef.current.value = "";} }}>
                             <DialogTrigger asChild>
-                                <Button variant="outline" size="icon" onClick={() => setSelectedStudentForImage(student)}>
+                                <Button variant="outline" size="icon" onClick={() => setSelectedStudentForImage(student)} disabled={!instituteFacesetToken}>
                                     <UploadCloud className="h-4 w-4" />
                                 </Button>
                             </DialogTrigger>
                             <DialogContent>
                                 <DialogHeader>
                                 <DialogTitle>Upload Photo for {selectedStudentForImage?.name}</DialogTitle>
-                                <DialogDescription>Select an image file (PNG, JPG, GIF up to 10MB).</DialogDescription>
+                                <DialogDescription>
+                                    Select an image file (PNG, JPG). The first detected face will be used for recognition.
+                                    {!instituteFacesetToken && <span className="text-destructive block mt-2">Warning: Institute FaceSet token not found. Facial recognition features will be disabled.</span>}
+                                </DialogDescription>
                                 </DialogHeader>
-                                <Input type="file" accept="image/*" ref={imageInputRef} onChange={(e) => e.target.files && setImageFile(e.target.files[0])} />
+                                <Input type="file" accept="image/png, image/jpeg" ref={imageInputRef} onChange={(e) => e.target.files && setImageFile(e.target.files[0])} />
                                 {imageFile && <p className="text-sm text-muted-foreground">Selected: {imageFile.name}</p>}
                                 <DialogFooter>
                                   <DialogClose asChild><Button variant="ghost">Cancel</Button></DialogClose>
-                                  <Button onClick={handleImageUpload} disabled={!imageFile || isUploadingImage}>
-                                    {isUploadingImage ? "Uploading..." : "Upload"}
+                                  <Button onClick={handleImageUpload} disabled={!imageFile || isUploadingImage || !instituteFacesetToken}>
+                                    {isUploadingImage ? "Processing..." : "Upload & Register Face"}
                                   </Button>
                                 </DialogFooter>
                             </DialogContent>
                         </Dialog>
-                        <Button variant="ghost" size="icon" onClick={() => toast({title: "Edit", description: "Edit functionality coming soon."})}>
+                        <Button variant="ghost" size="icon" onClick={() => toast({title: "Delete Student", description: "Delete functionality coming soon."})}>
                             <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
                     </TableCell>
@@ -255,4 +309,3 @@ export default function StudentManagement() {
     </div>
   );
 }
-

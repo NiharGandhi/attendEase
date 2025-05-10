@@ -7,16 +7,17 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Camera, Users, CheckCircle, XCircle, Loader2 } from 'lucide-react';
+import { Camera, Users, CheckCircle, XCircle, Loader2, AlertTriangle } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
-import type { Classroom, Student, AttendanceRecord } from '@/lib/types'; // Assuming types are defined
+import type { Classroom, Student, AttendanceRecord } from '@/lib/types';
 import { db } from '@/lib/firebase';
-import { collection, query, where, getDocs, serverTimestamp, addDoc, Timestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs, serverTimestamp, addDoc, Timestamp, doc, getDoc, writeBatch } from 'firebase/firestore';
+import { searchFaceAction, getInstituteFacesetToken } from '@/actions/faceplusplus';
 
-// Placeholder for recognized student structure
 interface RecognizedStudentInfo extends Student {
-  status: 'present' | 'unknown';
-  courseInfo?: string; // e.g. "CS101 - Intro to Programming"
+  status: 'present' | 'unknown' | 'absent'; // Added absent
+  recognizedAt?: Timestamp;
+  confidence?: number;
 }
 
 export default function AttendanceTracking() {
@@ -30,29 +31,30 @@ export default function AttendanceTracking() {
   const [isTracking, setIsTracking] = useState(false);
   const [selectedClassroom, setSelectedClassroom] = useState<string | null>(null);
   const [classrooms, setClassrooms] = useState<Classroom[]>([]);
-  const [studentsInClassroom, setStudentsInClassroom] = useState<Student[]>([]); // Students expected in selected class
-  const [recognizedStudents, setRecognizedStudents] = useState<RecognizedStudentInfo[]>([]);
+  const [studentsInClassroom, setStudentsInClassroom] = useState<Student[]>([]);
+  const [sessionAttendance, setSessionAttendance] = useState<Map<string, RecognizedStudentInfo>>(new Map()); // studentId -> RecognizedStudentInfo
   const [isProcessing, setIsProcessing] = useState(false);
+  const [instituteFacesetToken, setInstituteFacesetToken] = useState<string | null>(null);
   
   const attendanceIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (instituteId) {
       fetchClassrooms();
+      fetchFacesetToken();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [instituteId]);
   
   useEffect(() => {
-    // Fetch students when classroom changes
-    if (selectedClassroom) {
+    if (selectedClassroom && instituteId) {
       fetchStudentsForClassroom(selectedClassroom);
     } else {
       setStudentsInClassroom([]);
-      setRecognizedStudents([]);
+      setSessionAttendance(new Map());
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedClassroom]);
+  }, [selectedClassroom, instituteId]);
 
 
   useEffect(() => {
@@ -75,7 +77,7 @@ export default function AttendanceTracking() {
     };
     getCameraPermission();
 
-    return () => { // Cleanup
+    return () => {
         if (videoRef.current && videoRef.current.srcObject) {
             const stream = videoRef.current.srcObject as MediaStream;
             stream.getTracks().forEach(track => track.stop());
@@ -86,6 +88,12 @@ export default function AttendanceTracking() {
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  async function fetchFacesetToken() {
+    if (!instituteId) return;
+    const token = await getInstituteFacesetToken(instituteId);
+    setInstituteFacesetToken(token);
+  }
 
   async function fetchClassrooms() {
     if (!instituteId) return;
@@ -101,14 +109,31 @@ export default function AttendanceTracking() {
   }
   
   async function fetchStudentsForClassroom(classroomId: string) {
-    // This is a simplified fetch. In reality, you'd link students to classrooms more directly.
-    // For now, we assume all students of the institute might be in any class for demo.
     if (!instituteId) return;
     try {
-        const q = query(collection(db, "students"), where("instituteId", "==", instituteId));
+        // Assuming students are not directly linked to classrooms in Firestore for now.
+        // Fetch all students of the institute who have a faceToken.
+        const q = query(
+            collection(db, "students"), 
+            where("instituteId", "==", instituteId),
+            where("faceToken", "!=", null) // Only students with registered faces
+        );
         const studentSnapshot = await getDocs(q);
         const allStudents = studentSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Student));
-        setStudentsInClassroom(allStudents); // Or filter by classroomId if data model supports it
+        
+        // Filter students who are supposed to be in this classroom (if logic exists)
+        // For now, assuming all fetched (face-registered) students could be in any class
+        setStudentsInClassroom(allStudents); 
+
+        // Initialize session attendance for these students
+        const initialAttendance = new Map<string, RecognizedStudentInfo>();
+        allStudents.forEach(student => {
+          if(student.id) {
+            initialAttendance.set(student.id, { ...student, status: 'unknown' });
+          }
+        });
+        setSessionAttendance(initialAttendance);
+
     } catch (error) {
         console.error("Error fetching students for classroom:", error);
         toast({ variant: "destructive", title: "Error", description: "Failed to load students for the selected classroom." });
@@ -116,12 +141,15 @@ export default function AttendanceTracking() {
   }
 
   const captureFrameAndRecognize = async () => {
-    if (!videoRef.current || !canvasRef.current || !hasCameraPermission || !selectedClassroom || studentsInClassroom.length === 0) {
-      // If no classroom or students, don't attempt recognition
+    if (!videoRef.current || !canvasRef.current || !hasCameraPermission || !selectedClassroom || studentsInClassroom.length === 0 || !instituteFacesetToken || !instituteId) {
       if (isTracking && (!selectedClassroom || studentsInClassroom.length === 0)) {
         toast({variant: 'destructive', title: "Cannot Track", description: "Please select a classroom with registered students."});
-        stopTracking(); // Stop tracking if conditions not met
       }
+      if (isTracking && !instituteFacesetToken) {
+        toast({variant: 'destructive', title: "Configuration Error", description: "Institute FaceSet token not found. Tracking disabled."});
+      }
+      if(isTracking) setIsTracking(false); // Stop tracking if pre-conditions fail
+      setIsProcessing(false);
       return;
     }
     setIsProcessing(true);
@@ -132,85 +160,134 @@ export default function AttendanceTracking() {
     canvas.height = video.videoHeight;
     const context = canvas.getContext('2d');
     context?.drawImage(video, 0, 0, canvas.width, canvas.height);
-    const imageDataUrl = canvas.toDataURL('image/jpeg');
+    const imageDataUrl = canvas.toDataURL('image/jpeg', 0.8); // Use JPEG with some compression
 
-    // Placeholder for MEGVII Face++ API call
-    // const apiKey = process.env.FACEPLUSPLUS_API_KEY;
-    // const apiSecret = process.env.FACEPLUSPLUS_API_SECRET;
-    // if (!apiKey || !apiSecret) {
-    //   toast({ variant: 'destructive', title: 'API Error', description: 'Face++ API credentials not configured.' });
-    //   setIsProcessing(false);
-    //   return;
-    // }
-    
-    // Simulate API call and recognition
-    await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate network delay
-    
-    const currentRecognized: RecognizedStudentInfo[] = studentsInClassroom.map(student => {
-        // Simulate some students being recognized
-        const isRecognized = Math.random() > 0.7; // 30% chance of being recognized
-        return {
-            ...student,
-            status: isRecognized ? 'present' : 'unknown',
-            courseInfo: student.course // Simplified
-        };
-    });
-    setRecognizedStudents(currentRecognized);
+    try {
+      const searchResult = await searchFaceAction(imageDataUrl, instituteFacesetToken);
 
-    // Record attendance for recognized students
-    for (const recStudent of currentRecognized) {
-        if (recStudent.status === 'present' && recStudent.id && instituteId && selectedClassroom) {
-            const attendanceData: Omit<AttendanceRecord, 'id'> = {
-                instituteId,
-                classroomId: selectedClassroom,
-                studentFirebaseId: recStudent.id,
-                timestamp: serverTimestamp() as Timestamp,
-                status: 'present',
-                recognizedAt: serverTimestamp() as Timestamp
-            };
-            try {
-                await addDoc(collection(db, 'attendanceRecords'), attendanceData);
-            } catch (error) {
-                console.error("Error recording attendance:", error);
-                // Don't toast for every error to avoid spam, but log it.
-            }
+      const newSessionAttendance = new Map(sessionAttendance);
+      let studentRecognizedThisCycle = false;
+
+      if (searchResult.success && searchResult.faceToken && searchResult.confidence) {
+        const matchedStudent = studentsInClassroom.find(s => s.faceToken === searchResult.faceToken);
+        if (matchedStudent && matchedStudent.id) {
+          const existingEntry = newSessionAttendance.get(matchedStudent.id);
+          // Mark as present only if not already marked present or if confidence is higher (optional)
+          if (!existingEntry || existingEntry.status !== 'present') {
+            newSessionAttendance.set(matchedStudent.id, {
+              ...matchedStudent,
+              status: 'present',
+              recognizedAt: serverTimestamp() as Timestamp,
+              confidence: searchResult.confidence,
+            });
+            studentRecognizedThisCycle = true;
+            toast({ title: 'Student Recognized', description: `${matchedStudent.name} marked present. Confidence: ${searchResult.confidence.toFixed(2)}%`});
+          }
+        } else {
+          toast({variant: 'default', title:'Recognition Info', description: `Recognized face (token: ${searchResult.faceToken.substring(0,10)}...) not in current classroom list or student data issue.`})
         }
+      } else if (searchResult.error !== 'No confident match found.' && searchResult.error !== 'No faces detected in the search image.') { 
+        // Don't toast for common "no match" or "no face" scenarios to avoid spam
+        toast({ variant: 'destructive', title: 'Recognition Error', description: searchResult.error || 'Face search failed.' });
+      }
+      
+      setSessionAttendance(newSessionAttendance);
+      if (studentRecognizedThisCycle) {
+        // Consider batching Firestore writes if many students are recognized rapidly
+      }
+
+    } catch (error: any) {
+      toast({ variant: 'destructive', title: 'Recognition System Error', description: error.message });
+    } finally {
+      setIsProcessing(false);
     }
-    setIsProcessing(false);
-    toast({ title: 'Attendance Updated', description: 'Recognition cycle complete.' });
   };
 
   const startTracking = () => {
     if (!selectedClassroom) {
-        toast({ variant: "destructive", title: "No Classroom Selected", description: "Please select a classroom to start attendance tracking." });
+        toast({ variant: "destructive", title: "No Classroom Selected", description: "Please select a classroom." });
         return;
     }
     if (studentsInClassroom.length === 0) {
-        toast({ variant: "destructive", title: "No Students", description: "No students registered for this classroom. Add students first." });
+        toast({ variant: "destructive", title: "No Registered Students", description: "No students with registered faces found for this institute. Add students and upload their photos first." });
+        return;
+    }
+    if (!instituteFacesetToken) {
+        toast({ variant: "destructive", title: "Configuration Error", description: "Institute FaceSet token not found. Cannot start tracking." });
         return;
     }
     setIsTracking(true);
-    captureFrameAndRecognize(); // Initial capture
-    attendanceIntervalRef.current = setInterval(captureFrameAndRecognize, 5 * 60 * 1000); // Every 5 minutes
+    // Initialize/reset attendance for the session: mark all as 'unknown' or 'absent' initially
+    const initialAttendance = new Map<string, RecognizedStudentInfo>();
+    studentsInClassroom.forEach(student => {
+      if(student.id) {
+        initialAttendance.set(student.id, { ...student, status: 'unknown' }); // Or 'absent'
+      }
+    });
+    setSessionAttendance(initialAttendance);
+
+    captureFrameAndRecognize(); 
+    // Interval: 30 seconds for demo, increase for production (e.g., 1-5 minutes)
+    attendanceIntervalRef.current = setInterval(captureFrameAndRecognize, 30 * 1000); 
     toast({ title: 'Attendance Tracking Started', description: `For classroom: ${classrooms.find(c=>c.id === selectedClassroom)?.roomNumber}` });
   };
 
-  const stopTracking = () => {
+  const stopTracking = async () => {
     setIsTracking(false);
     if (attendanceIntervalRef.current) {
       clearInterval(attendanceIntervalRef.current);
       attendanceIntervalRef.current = null;
     }
-    setRecognizedStudents([]); // Clear recognized students on stop
+    
+    // Save final attendance state to Firestore
+    if (instituteId && selectedClassroom && sessionAttendance.size > 0) {
+        const batch = writeBatch(db);
+        sessionAttendance.forEach((studentInfo, studentId) => {
+            if (studentInfo.status === 'present') {
+                const recordRef = doc(collection(db, 'attendanceRecords')); // Auto-generate ID
+                const attendanceData: Omit<AttendanceRecord, 'id'> = {
+                    instituteId,
+                    classroomId: selectedClassroom!,
+                    studentFirebaseId: studentId,
+                    timestamp: studentInfo.recognizedAt || serverTimestamp() as Timestamp, // Use recognition time or current
+                    status: 'present',
+                    recognizedAt: studentInfo.recognizedAt,
+                    method: 'facial_recognition'
+                };
+                batch.set(recordRef, attendanceData);
+            }
+            // Optionally, mark others as absent if policy dictates
+        });
+        try {
+            await batch.commit();
+            toast({ title: 'Attendance Session Saved', description: 'Final attendance recorded.' });
+        } catch (error) {
+            console.error("Error saving attendance batch:", error);
+            toast({ variant: 'destructive', title: 'Save Error', description: 'Could not save attendance records.' });
+        }
+    }
+    // Optionally clear sessionAttendance or keep for review: setSessionAttendance(new Map());
     toast({ title: 'Attendance Tracking Stopped' });
   };
 
   if (!instituteId) {
     return <p className="text-destructive text-center p-4">Institute ID not found.</p>;
   }
+  
+  const displayedStudents = Array.from(sessionAttendance.values());
 
   return (
     <div className="space-y-6">
+      {!instituteFacesetToken && (
+         <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Facial Recognition Not Configured</AlertTitle>
+          <AlertDescription>
+            This institute does not have a FaceSet configured for facial recognition. 
+            Attendance tracking via facial recognition is disabled.
+          </AlertDescription>
+        </Alert>
+      )}
       <Card className="shadow-xl">
         <CardHeader>
           <CardTitle className="text-2xl">Live Attendance Tracking</CardTitle>
@@ -232,7 +309,7 @@ export default function AttendanceTracking() {
                     {hasCameraPermission === null && <p className="text-sm text-muted-foreground text-center py-2">Initializing camera...</p>}
                 </CardContent>
               </Card>
-              <canvas ref={canvasRef} style={{ display: 'none' }} /> {/* Hidden canvas for frame capture */}
+              <canvas ref={canvasRef} style={{ display: 'none' }} />
               
               <div className="flex flex-col sm:flex-row gap-2">
                 <Select onValueChange={setSelectedClassroom} value={selectedClassroom || ""} disabled={isTracking}>
@@ -244,12 +321,12 @@ export default function AttendanceTracking() {
                   </SelectContent>
                 </Select>
                 {!isTracking ? (
-                  <Button onClick={startTracking} disabled={!hasCameraPermission || !selectedClassroom || isProcessing} className="w-full sm:w-auto bg-accent hover:bg-accent/90 text-accent-foreground">
+                  <Button onClick={startTracking} disabled={!hasCameraPermission || !selectedClassroom || isProcessing || !instituteFacesetToken} className="w-full sm:w-auto bg-accent hover:bg-accent/90 text-accent-foreground">
                     <Camera className="mr-2 h-4 w-4" /> Start Tracking
                   </Button>
                 ) : (
                   <Button onClick={stopTracking} variant="destructive" className="w-full sm:w-auto">
-                    <XCircle className="mr-2 h-4 w-4" /> Stop Tracking
+                    <XCircle className="mr-2 h-4 w-4" /> Stop Tracking & Save
                   </Button>
                 )}
               </div>
@@ -258,36 +335,38 @@ export default function AttendanceTracking() {
 
             <Card className="h-full shadow-md">
               <CardHeader>
-                <CardTitle className="flex items-center"><Users className="mr-2 h-5 w-5 text-primary" /> Recognized Students</CardTitle>
-                <CardDescription>Students detected in the current session for {selectedClassroom ? `${classrooms.find(c=>c.id === selectedClassroom)?.roomNumber} - ${classrooms.find(c=>c.id === selectedClassroom)?.section}` : "the selected classroom"}.</CardDescription>
+                <CardTitle className="flex items-center"><Users className="mr-2 h-5 w-5 text-primary" /> Session Attendance Status</CardTitle>
+                <CardDescription>
+                    Status for {selectedClassroom ? `${classrooms.find(c=>c.id === selectedClassroom)?.roomNumber} - ${classrooms.find(c=>c.id === selectedClassroom)?.section}` : "the selected classroom"}.
+                    Only students with registered faces are listed.
+                </CardDescription>
               </CardHeader>
               <CardContent className="max-h-[400px] overflow-y-auto">
-                {isTracking && recognizedStudents.length === 0 && !isProcessing && <p className="text-muted-foreground">No students recognized yet. Ensure faces are visible.</p>}
-                {!isTracking && <p className="text-muted-foreground">Start tracking to see recognized students.</p>}
+                {!isTracking && displayedStudents.length === 0 && <p className="text-muted-foreground">Start tracking to see attendance status. Ensure students have registered faces.</p>}
+                {isTracking && displayedStudents.length === 0 && !isProcessing && <p className="text-muted-foreground">No students with registered faces loaded for this classroom or initial scan pending.</p>}
+
                 <ul className="space-y-2">
-                  {recognizedStudents.filter(s => s.status === 'present').map(student => (
-                    <li key={student.id} className="flex items-center justify-between p-2 border rounded-md bg-green-50 border-green-200">
-                      <div>
-                        <p className="font-semibold">{student.name} <span className="text-xs text-muted-foreground">({student.studentIdNo})</span></p>
-                        <p className="text-xs text-green-700">{student.courseInfo}</p>
+                  {displayedStudents.map(student => (
+                    <li 
+                        key={student.id} 
+                        className={`flex items-center justify-between p-2 border rounded-md 
+                        ${student.status === 'present' ? 'bg-green-50 border-green-200' : 
+                          student.status === 'absent' ? 'bg-red-50 border-red-200' : 'bg-yellow-50 border-yellow-200'}`}
+                    >
+                      <div className="flex items-center gap-2">
+                        {student.imageUrl && <Image src={student.imageUrl} alt={student.name} width={32} height={32} className="rounded-full object-cover" data-ai-hint="student face" unoptimized/>}
+                        <div>
+                            <p className="font-semibold">{student.name} <span className="text-xs text-muted-foreground">({student.studentIdNo})</span></p>
+                            <p className="text-xs">
+                                {student.status === 'present' ? `Present (Conf: ${student.confidence?.toFixed(1)}%)` : student.status === 'absent' ? 'Absent' : 'Status Unknown'}
+                            </p>
+                        </div>
                       </div>
-                      <CheckCircle className="h-5 w-5 text-green-600" />
+                      {student.status === 'present' && <CheckCircle className="h-5 w-5 text-green-600" />}
+                      {student.status === 'absent' && <XCircle className="h-5 w-5 text-red-600" />}
+                      {student.status === 'unknown' && <AlertTriangle className="h-5 w-5 text-yellow-500" />}
                     </li>
                   ))}
-                   {isTracking && studentsInClassroom.filter(s => !recognizedStudents.find(rs => rs.id === s.id && rs.status === 'present')).length > 0 && (
-                    <div className="mt-4">
-                        <p className="text-sm font-medium text-destructive mb-1">Not Detected / Absent:</p>
-                        {studentsInClassroom.filter(s => !recognizedStudents.find(rs => rs.id === s.id && rs.status === 'present')).map(student => (
-                             <li key={`absent-${student.id}`} className="flex items-center justify-between p-2 border rounded-md bg-red-50 border-red-200 mb-1">
-                                <div>
-                                    <p className="font-semibold">{student.name} <span className="text-xs text-muted-foreground">({student.studentIdNo})</span></p>
-                                    <p className="text-xs text-red-700">{student.course}</p>
-                                </div>
-                                <XCircle className="h-5 w-5 text-red-600" />
-                            </li>
-                        ))}
-                    </div>
-                   )}
                 </ul>
               </CardContent>
             </Card>
