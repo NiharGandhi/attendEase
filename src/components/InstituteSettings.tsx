@@ -91,11 +91,11 @@ export default function InstituteSettings() {
         address: values.address,
         contactEmail: values.contactEmail,
         contactPhone: values.contactPhone,
-        webhookUrl: values.webhookUrl || null, // Store null if empty or undefined
+        webhookUrl: values.webhookUrl || null, 
       };
       await updateDoc(instituteRef, dataToUpdate);
       toast({ title: 'Settings Updated', description: 'Institute details saved successfully.' });
-      fetchInstituteDetails(); 
+      setInstitute(prev => ({ ...prev, ...dataToUpdate } as Institute)); // Update local state
     } catch (error) {
       toast({ variant: 'destructive', title: 'Error', description: 'Failed to update settings.' });
     } finally {
@@ -175,7 +175,7 @@ export default function InstituteSettings() {
       <Card className="shadow-xl border-t-4 border-accent">
         <CardHeader>
           <CardTitle className="text-2xl flex items-center gap-2"><Webhook className="h-6 w-6 text-accent"/>External Integrations & Data Export</CardTitle>
-          <CardDescription>Configure webhooks, and learn about upcoming API and system integrations.</CardDescription>
+          <CardDescription>Configure webhooks and learn about upcoming API and system integrations.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
            <Form {...form}> {/* Use the same form instance */}
