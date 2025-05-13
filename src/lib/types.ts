@@ -1,6 +1,6 @@
 
 import type { Timestamp } from 'firebase/firestore';
-import { z } from 'zod'; // Added to make the LoginFormData work
+import { z } from 'zod';
 
 export interface Institute {
   id?: string; // Firestore document ID
@@ -46,19 +46,41 @@ export interface Student {
   createdAt?: Timestamp;
 }
 
+export enum DayOfWeek {
+    Monday = "Monday",
+    Tuesday = "Tuesday",
+    Wednesday = "Wednesday",
+    Thursday = "Thursday",
+    Friday = "Friday",
+    Saturday = "Saturday",
+    Sunday = "Sunday"
+}
+export const daysOfWeekArray = Object.values(DayOfWeek);
+
+
+export interface TimeSlot {
+  startTime: string; // HH:mm format
+  endTime: string;   // HH:mm format
+}
+
+export interface ClassScheduleItem {
+  dayOfWeek: DayOfWeek;
+  startTime: string; // HH:mm format
+  endTime: string;   // HH:mm format
+  // No need for TimeSlot interface here, direct properties are fine.
+}
+
 export interface ScheduledClass {
   id?: string; // Firestore document ID
   instituteId: string;
   classroomId: string; // ID of the physical classroom
-  classroomDiplayName?: string; // Denormalized: e.g., "Room 101 - Section A" for display in lists
+  classroomDiplayName?: string; // Denormalized: e.g., "Room 101 - Section A"
   subjectName: string;
   subjectCode?: string;
-  dayOfWeek: 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday' | 'Saturday' | 'Sunday';
-  startTime: string; // HH:mm format
-  endTime: string; // HH:mm format
   teacherId?: string; // Employee ID
   teacherName?: string; // Denormalized for display
   studentIds: string[]; // Array of Student Firestore IDs enrolled in this class
+  schedules: ClassScheduleItem[]; // Array of day/time slots for this class
   createdAt?: Timestamp;
 }
 
@@ -66,8 +88,9 @@ export interface AttendanceRecord {
   id?: string; // Firestore document ID
   instituteId: string;
   scheduledClassId: string; // ID of the ScheduledClass instance
+  // specificSchedule: ClassScheduleItem; // Could store the specific schedule instance if needed
   studentFirebaseId: string; // The Student's Firestore document ID
-  timestamp: Timestamp; // Date of the attendance
+  timestamp: Timestamp; // Date and time of the attendance, effectively identifying the slot
   status: 'present' | 'absent';
   recognizedAt?: Timestamp; // Time of recognition if facial
   method?: 'manual' | 'facial_recognition';
@@ -78,7 +101,12 @@ export type InstituteFormData = Omit<Institute, 'id' | 'createdAt' | 'adminUid' 
 export type EmployeeFormData = Omit<Employee, 'id' | 'instituteId' | 'createdAt' | 'firebaseUid'>;
 export type ClassroomFormData = Omit<Classroom, 'id' | 'instituteId' | 'createdAt'>;
 export type StudentFormData = Omit<Student, 'id' | 'instituteId' | 'imageUrl' | 'faceToken' | 'createdAt'>;
-export type ScheduledClassFormData = Omit<ScheduledClass, 'id' | 'createdAt' | 'classroomDiplayName' | 'teacherName'>;
+
+// For ScheduledClass form, schedules will be handled by useFieldArray
+export type ScheduledClassFormData = Omit<ScheduledClass, 'id' | 'createdAt' | 'classroomDiplayName' | 'teacherName' | 'schedules'> & {
+  schedules: Array<{ dayOfWeek?: DayOfWeek; startTime?: string; endTime?: string; }>; // Looser type for form before validation
+};
+
 
 export const instituteSettingsFormSchema = z.object({
   name: z.string().min(2, { message: 'Institute name must be at least 2 characters.' }),
@@ -91,3 +119,28 @@ export type InstituteSettingsFormData = z.infer<typeof instituteSettingsFormSche
 
 export type LoginFormData = z.infer<typeof import('@/components/LoginForm').loginFormSchema>;
 
+
+// Utility for time conflict checking
+export function timeToMinutes(time: string): number {
+    if (!time || !/^\d{2}:\d{2}$/.test(time)) return 0; // Handle invalid format
+    const [hours, minutes] = time.split(":").map(Number);
+    return hours * 60 + minutes;
+}
+
+export function checkScheduleConflict(
+    schedule1: { dayOfWeek: DayOfWeek; startTime: string; endTime: string },
+    schedule2: { dayOfWeek: DayOfWeek; startTime: string; endTime: string }
+): boolean {
+    if (schedule1.dayOfWeek !== schedule2.dayOfWeek) {
+        return false; // Different days, no conflict
+    }
+
+    const startTime1 = timeToMinutes(schedule1.startTime);
+    const endTime1 = timeToMinutes(schedule1.endTime);
+    const startTime2 = timeToMinutes(schedule2.startTime);
+    const endTime2 = timeToMinutes(schedule2.endTime);
+
+    // Check for overlap:
+    // They overlap if one starts before the other ends, and the other starts before the first one ends.
+    return startTime1 < endTime2 && startTime2 < endTime1;
+}

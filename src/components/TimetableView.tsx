@@ -8,25 +8,29 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { db } from '@/lib/firebase';
-import type { ScheduledClass, Student, Employee } from '@/lib/types';
+import type { ScheduledClass, Student, Employee, ClassScheduleItem } from '@/lib/types';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { CalendarDays, User, BookUser, Filter } from 'lucide-react';
+import { daysOfWeekArray, DayOfWeek } from '@/lib/types'; // Import daysOfWeekArray
 
 type ViewMode = 'student' | 'teacher';
-const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] as const;
+
+interface TimetableEntry extends ScheduledClass {
+  specificSchedule: ClassScheduleItem;
+}
 
 export default function TimetableView() {
   const { toast } = useToast();
   const searchParams = useSearchParams();
   const instituteId = searchParams.get('instituteId');
 
-  const [scheduledClasses, setScheduledClasses] = useState<ScheduledClass[]>([]);
+  const [allScheduledClasses, setAllScheduledClasses] = useState<ScheduledClass[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [teachers, setTeachers] = useState<Employee[]>([]);
   
   const [viewMode, setViewMode] = useState<ViewMode>('student');
   const [selectedEntityId, setSelectedEntityId] = useState<string | null>(null);
-  const [filteredTimetable, setFilteredTimetable] = useState<ScheduledClass[]>([]);
+  const [filteredTimetable, setFilteredTimetable] = useState<TimetableEntry[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
@@ -37,9 +41,9 @@ export default function TimetableView() {
   }, [instituteId]);
 
   useEffect(() => {
-    filterTimetable();
+    generateTimetable();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedEntityId, viewMode, scheduledClasses]);
+  }, [selectedEntityId, viewMode, allScheduledClasses]);
 
   async function fetchInitialData() {
     if (!instituteId) return;
@@ -56,7 +60,7 @@ export default function TimetableView() {
       ]);
 
       const fetchedClasses = classSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as ScheduledClass));
-      setScheduledClasses(fetchedClasses);
+      setAllScheduledClasses(fetchedClasses);
       setStudents(studentSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Student)));
       setTeachers(teacherSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Employee)));
       
@@ -67,29 +71,38 @@ export default function TimetableView() {
     }
   }
 
-  function filterTimetable() {
-    if (!selectedEntityId) {
+  function generateTimetable() {
+    if (!selectedEntityId || !allScheduledClasses) {
       setFilteredTimetable([]);
       return;
     }
-    let filtered: ScheduledClass[] = [];
-    if (viewMode === 'student') {
-      filtered = scheduledClasses.filter(sc => sc.studentIds.includes(selectedEntityId));
-    } else if (viewMode === 'teacher') {
-      filtered = scheduledClasses.filter(sc => sc.teacherId === selectedEntityId);
-    }
-    // Sort by day and then by start time
-    filtered.sort((a, b) => {
-        const dayComparison = daysOfWeek.indexOf(a.dayOfWeek) - daysOfWeek.indexOf(b.dayOfWeek);
-        if (dayComparison !== 0) return dayComparison;
-        return a.startTime.localeCompare(b.startTime);
+    
+    let relevantClasses: TimetableEntry[] = [];
+
+    allScheduledClasses.forEach(sc => {
+      if (viewMode === 'student' && sc.studentIds.includes(selectedEntityId)) {
+        sc.schedules.forEach(scheduleItem => {
+          relevantClasses.push({ ...sc, specificSchedule: scheduleItem });
+        });
+      } else if (viewMode === 'teacher' && sc.teacherId === selectedEntityId) {
+         sc.schedules.forEach(scheduleItem => {
+          relevantClasses.push({ ...sc, specificSchedule: scheduleItem });
+        });
+      }
     });
-    setFilteredTimetable(filtered);
+
+    // Sort by day and then by start time
+    relevantClasses.sort((a, b) => {
+        const dayComparison = daysOfWeekArray.indexOf(a.specificSchedule.dayOfWeek) - daysOfWeekArray.indexOf(b.specificSchedule.dayOfWeek);
+        if (dayComparison !== 0) return dayComparison;
+        return a.specificSchedule.startTime.localeCompare(b.specificSchedule.startTime);
+    });
+    setFilteredTimetable(relevantClasses);
   }
   
   const handleViewModeChange = (value: string) => {
     setViewMode(value as ViewMode);
-    setSelectedEntityId(null); // Reset selection when mode changes
+    setSelectedEntityId(null); 
     setFilteredTimetable([]);
   }
 
@@ -136,6 +149,7 @@ export default function TimetableView() {
                   </SelectTrigger>
                   <SelectContent>
                     {students.map(s => <SelectItem key={s.id} value={s.id!}>{s.name} ({s.studentIdNo})</SelectItem>)}
+                     {students.length === 0 && <SelectItem value="no-students" disabled>No students found</SelectItem>}
                   </SelectContent>
                 </Select>
               </div>
@@ -150,16 +164,17 @@ export default function TimetableView() {
                   </SelectTrigger>
                   <SelectContent>
                     {teachers.map(t => <SelectItem key={t.id} value={t.id!}>{t.name}</SelectItem>)}
+                    {teachers.length === 0 && <SelectItem value="no-teachers" disabled>No teachers found</SelectItem>}
                   </SelectContent>
                 </Select>
               </div>
             )}
-             <Button onClick={filterTimetable} disabled={!selectedEntityId || isLoading} className="bg-accent hover:bg-accent/90 text-accent-foreground">
+             <Button onClick={generateTimetable} disabled={!selectedEntityId || isLoading} className="bg-accent hover:bg-accent/90 text-accent-foreground">
                 <Filter className="mr-2 h-4 w-4"/> Show Timetable
             </Button>
           </div>
 
-          {isLoading && <p>Loading data...</p>}
+          {isLoading && <p className="text-center py-4">Loading data...</p>}
           
           {!isLoading && selectedEntityId && (
             <Card>
@@ -168,25 +183,28 @@ export default function TimetableView() {
                 {filteredTimetable.length === 0 && <CardDescription>No classes scheduled for the selected {viewMode}.</CardDescription>}
               </CardHeader>
               <CardContent>
-                {daysOfWeek.map(day => {
-                  const classesForDay = filteredTimetable.filter(c => c.dayOfWeek === day);
+                {daysOfWeekArray.map(day => {
+                  const classesForDay = filteredTimetable.filter(entry => entry.specificSchedule.dayOfWeek === day);
                   if (classesForDay.length === 0) return null;
 
                   return (
-                    <div key={day} className="mb-4">
-                      <h3 className="text-lg font-semibold text-primary mb-2 border-b pb-1">{day}</h3>
-                      <ul className="space-y-2">
-                        {classesForDay.map(sc => (
-                          <li key={sc.id} className="p-3 border rounded-md shadow-sm bg-card">
-                            <p className="font-medium">{sc.subjectName} {sc.subjectCode && `(${sc.subjectCode})`}</p>
+                    <div key={day} className="mb-6">
+                      <h3 className="text-xl font-semibold text-primary mb-3 border-b pb-2">{day}</h3>
+                      <ul className="space-y-3">
+                        {classesForDay.map(entry => (
+                          <li key={`${entry.id}-${entry.specificSchedule.startTime}`} className="p-4 border rounded-lg shadow-sm bg-card hover:shadow-md transition-shadow">
+                            <p className="font-semibold text-lg">{entry.subjectName} {entry.subjectCode && `(${entry.subjectCode})`}</p>
                             <p className="text-sm text-muted-foreground">
-                              Time: {sc.startTime} - {sc.endTime}
+                              Time: {entry.specificSchedule.startTime} - {entry.specificSchedule.endTime}
                             </p>
                             <p className="text-sm text-muted-foreground">
-                              Classroom: {sc.classroomDiplayName || 'N/A'}
+                              Classroom: {entry.classroomDiplayName || 'N/A'}
                             </p>
-                            {viewMode === 'student' && sc.teacherName && (
-                                <p className="text-sm text-muted-foreground">Teacher: {sc.teacherName}</p>
+                            {viewMode === 'student' && entry.teacherName && (
+                                <p className="text-sm text-muted-foreground">Teacher: {entry.teacherName}</p>
+                            )}
+                            {viewMode === 'teacher' && (
+                                <p className="text-sm text-muted-foreground">Students: {entry.studentIds.length}</p>
                             )}
                           </li>
                         ))}
