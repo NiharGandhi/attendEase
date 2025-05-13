@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { Classroom, ClassroomFormData } from '@/lib/types';
@@ -11,10 +12,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
 import { db } from '@/lib/firebase';
-import { addDoc, collection, query, where, getDocs, serverTimestamp, Timestamp } from 'firebase/firestore';
+import { addDoc, collection, query, where, getDocs, serverTimestamp, Timestamp, doc, updateDoc } from 'firebase/firestore';
 import { useSearchParams } from 'next/navigation';
 import React, { useEffect, useState } from 'react';
-import { PlusCircle, Trash2 } from 'lucide-react';
+import { PlusCircle, Trash2, Edit3 } from 'lucide-react'; // Added Edit3
 
 const classroomFormSchema = z.object({
   roomNumber: z.string().min(1, { message: "Room number is required." }),
@@ -32,7 +33,8 @@ export default function ClassroomManagement() {
   const [classrooms, setClassrooms] = useState<Classroom[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [showAddForm, setShowAddForm] = useState(action === 'add');
+  const [showForm, setShowForm] = useState(action === 'add');
+  const [editingClassroom, setEditingClassroom] = useState<Classroom | null>(null);
 
   const form = useForm<z.infer<typeof classroomFormSchema>>({
     resolver: zodResolver(classroomFormSchema),
@@ -44,8 +46,11 @@ export default function ClassroomManagement() {
   });
 
   useEffect(() => {
-    setShowAddForm(action === 'add');
-  }, [action]);
+     if (action === 'add' && !editingClassroom) {
+      setShowForm(true);
+      form.reset({ roomNumber: '', section: '', capacity: undefined });
+    }
+  }, [action, form, editingClassroom]);
 
   useEffect(() => {
     if (instituteId) {
@@ -73,6 +78,22 @@ export default function ClassroomManagement() {
     }
   }
 
+  const handleEdit = (classroom: Classroom) => {
+    setEditingClassroom(classroom);
+    form.reset({
+      roomNumber: classroom.roomNumber,
+      section: classroom.section,
+      capacity: classroom.capacity ?? undefined,
+    });
+    setShowForm(true);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingClassroom(null);
+    setShowForm(false);
+    form.reset({ roomNumber: '', section: '', capacity: undefined });
+  };
+
   async function onSubmit(values: z.infer<typeof classroomFormSchema>) {
     if (!instituteId) {
       toast({ variant: 'destructive', title: 'Error', description: 'Institute ID is missing.' });
@@ -80,21 +101,31 @@ export default function ClassroomManagement() {
     }
     setIsSubmitting(true);
     try {
-      const classroomData: Omit<Classroom, 'id' | 'createdAt'> & { createdAt: any } = {
+      const classroomData: Omit<Classroom, 'id' | 'createdAt'> & { createdAt?: any, updatedAt?: any } = {
         roomNumber: values.roomNumber,
         section: values.section,
-        capacity: values.capacity ? Number(values.capacity) : undefined, // Ensure capacity is a number or undefined
+        capacity: values.capacity ? Number(values.capacity) : undefined,
         instituteId,
-        createdAt: serverTimestamp(),
       };
-      await addDoc(collection(db, 'classrooms'), classroomData);
-      toast({ title: 'Classroom Added', description: `Classroom ${values.roomNumber} - ${values.section} has been added.` });
-      form.reset();
-      setShowAddForm(false);
-      fetchClassrooms(); // Refresh list
+
+      if (editingClassroom && editingClassroom.id) {
+        const classroomDocRef = doc(db, 'classrooms', editingClassroom.id);
+        classroomData.updatedAt = serverTimestamp();
+        await updateDoc(classroomDocRef, classroomData);
+        toast({ title: 'Classroom Updated', description: `Classroom ${values.roomNumber} - ${values.section} has been updated.` });
+      } else {
+        classroomData.createdAt = serverTimestamp();
+        await addDoc(collection(db, 'classrooms'), classroomData);
+        toast({ title: 'Classroom Added', description: `Classroom ${values.roomNumber} - ${values.section} has been added.` });
+      }
+      
+      form.reset({ roomNumber: '', section: '', capacity: undefined });
+      setShowForm(false);
+      setEditingClassroom(null);
+      fetchClassrooms(); 
     } catch (error) {
-      console.error('Error adding classroom:', error);
-      toast({ variant: 'destructive', title: 'Error', description: 'Failed to add classroom.' });
+      console.error('Error saving classroom:', error);
+      toast({ variant: 'destructive', title: 'Error', description: 'Failed to save classroom.' });
     } finally {
       setIsSubmitting(false);
     }
@@ -109,14 +140,22 @@ export default function ClassroomManagement() {
       <Card className="shadow-xl">
         <CardHeader className="flex flex-row items-center justify-between">
             <div>
-                <CardTitle className="text-2xl">Manage Classrooms</CardTitle>
+                <CardTitle className="text-2xl">{editingClassroom ? 'Edit Classroom' : 'Manage Classrooms'}</CardTitle>
                 <CardDescription>Define classrooms, sections, and capacities.</CardDescription>
             </div>
-            <Button variant="outline" onClick={() => setShowAddForm(!showAddForm)}>
-                <PlusCircle className="mr-2 h-4 w-4" /> {showAddForm ? 'Cancel' : 'Add Classroom'}
+            <Button variant="outline" onClick={() => {
+              if (showForm) {
+                handleCancelEdit();
+              } else {
+                setEditingClassroom(null);
+                form.reset({ roomNumber: '', section: '', capacity: undefined });
+                setShowForm(true);
+              }
+            }}>
+                <PlusCircle className="mr-2 h-4 w-4" /> {showForm ? 'Cancel' : 'Add Classroom'}
             </Button>
         </CardHeader>
-        {showAddForm && (
+        {showForm && (
             <CardContent>
                 <Form {...form}>
                     <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 p-4 border rounded-md">
@@ -165,7 +204,7 @@ export default function ClassroomManagement() {
                         )}
                     />
                     <Button type="submit" className="w-full" disabled={isSubmitting}>
-                        {isSubmitting ? 'Adding...' : 'Add Classroom'}
+                        {isSubmitting ? (editingClassroom ? 'Updating...' : 'Adding...') : (editingClassroom ? 'Update Classroom' : 'Add Classroom')}
                     </Button>
                     </form>
                 </Form>
@@ -204,9 +243,12 @@ export default function ClassroomManagement() {
                             ? classroom.createdAt.toDate().toLocaleDateString() 
                             : 'N/A'}
                     </TableCell>
-                    <TableCell className="text-right">
-                        <Button variant="ghost" size="icon" onClick={() => toast({title: "Edit", description: "Edit functionality coming soon."})}>
-                            <Trash2 className="h-4 w-4 text-destructive" /> {/* Placeholder */}
+                    <TableCell className="text-right space-x-1">
+                        <Button variant="ghost" size="icon" onClick={() => handleEdit(classroom)} title="Edit Classroom">
+                            <Edit3 className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => toast({title: "Delete", description: "Delete functionality coming soon."})} title="Delete Classroom">
+                            <Trash2 className="h-4 w-4 text-destructive" /> 
                         </Button>
                     </TableCell>
                   </TableRow>

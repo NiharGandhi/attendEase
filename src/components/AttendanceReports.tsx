@@ -5,7 +5,6 @@ import React, { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input'; // Kept for potential future use
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -16,7 +15,7 @@ import { collection, query, where, getDocs, Timestamp } from 'firebase/firestore
 import { ClipboardList, Download, Filter } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { format, parse } from "date-fns";
+import { format } from "date-fns";
 import { Calendar as CalendarIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -31,12 +30,12 @@ export default function AttendanceReports() {
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
   const [filteredRecords, setFilteredRecords] = useState<AttendanceRecord[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
-  const [allScheduledClasses, setAllScheduledClasses] = useState<ScheduledClass[]>([]); // Stores full SC objects
+  const [allScheduledClasses, setAllScheduledClasses] = useState<ScheduledClass[]>([]); 
   
   const [isLoading, setIsLoading] = useState(false);
   const [dateRange, setDateRange] = useState<{ from?: Date; to?: Date }>({});
   const [selectedStudentId, setSelectedStudentId] = useState<string | undefined>(ALL_STUDENTS_VALUE);
-  const [selectedClassId, setSelectedClassId] = useState<string | undefined>(ALL_CLASSES_VALUE); // This will be ScheduledClass.id
+  const [selectedClassId, setSelectedClassId] = useState<string | undefined>(ALL_CLASSES_VALUE);
 
   useEffect(() => {
     if (instituteId) {
@@ -75,8 +74,8 @@ export default function AttendanceReports() {
         return { 
           ...data, 
           id: d.id, 
-          classroomDiplayName: classroom ? `${classroom.roomNumber} - ${classroom.section}`: 'N/A',
-          schedules: data.schedules || [] // Ensure schedules is always an array
+          classroomDiplayName: classroom ? `${classroom.roomNumber} - ${classroom.section}`: data.classroomDiplayName || 'N/A',
+          daysOfWeek: data.daysOfWeek || [], // Ensure daysOfWeek is always an array
         };
       });
 
@@ -85,6 +84,7 @@ export default function AttendanceReports() {
       setAllScheduledClasses(fetchedScheduledClasses);
 
     } catch (error) {
+      console.error("Error fetching initial data for reports:", error);
       toast({ variant: 'destructive', title: 'Error', description: 'Failed to fetch attendance data.' });
     } finally {
       setIsLoading(false);
@@ -109,7 +109,7 @@ export default function AttendanceReports() {
     if (selectedStudentId && selectedStudentId !== ALL_STUDENTS_VALUE) {
         tempRecords = tempRecords.filter(r => r.studentFirebaseId === selectedStudentId);
     }
-    if (selectedClassId && selectedClassId !== ALL_CLASSES_VALUE) { // selectedClassId is the ScheduledClass.id
+    if (selectedClassId && selectedClassId !== ALL_CLASSES_VALUE) { 
         tempRecords = tempRecords.filter(r => r.scheduledClassId === selectedClassId);
     }
     setFilteredRecords(tempRecords.sort((a,b) => b.timestamp.toMillis() - a.timestamp.toMillis()));
@@ -129,24 +129,15 @@ export default function AttendanceReports() {
     const sc = allScheduledClasses.find(s => s.id === scheduledClassId);
     if (!sc) return scheduledClassId;
 
-    // sc.schedules is now guaranteed to be an array by the data fetching logic, but it might be empty.
     const recordDate = recordTimestamp.toDate();
-    const recordDay = format(recordDate, 'EEEE') as DayOfWeek; // E.g., "Monday"
+    const recordDay = format(recordDate, 'EEEE') as DayOfWeek;
 
-    // Attempt to find a schedule item that matches the day of the record.
-    // This is a simplification. A real system might store which specific scheduleItem
-    // the attendance record corresponds to if a class has multiple slots on the same day.
-    const matchedSchedule = sc.schedules.find(slot => slot.dayOfWeek === recordDay);
-
-    let timeDisplay = "General"; // Default if no specific slot is matched by day
-    if (matchedSchedule) {
-      timeDisplay = `${matchedSchedule.startTime}-${matchedSchedule.endTime}`;
-    } else if (sc.schedules && sc.schedules.length > 0) {
-      // If there are schedules, but none match the record's day.
-      timeDisplay = `Scheduled on other days`;
-    } else {
-      // If sc.schedules is empty
-      timeDisplay = `No schedule slots defined`;
+    let timeDisplay = `${sc.startTime}-${sc.endTime}`;
+    // Check if the class actually occurs on the day of the record
+    if (!sc.daysOfWeek || !sc.daysOfWeek.includes(recordDay)) {
+      timeDisplay = `Scheduled on other days (${sc.startTime}-${sc.endTime})`;
+    } else if (!sc.startTime || !sc.endTime) {
+      timeDisplay = "Time not defined";
     }
     
     return `${sc.subjectName} (${sc.classroomDiplayName || 'N/A'}) - ${timeDisplay}`;
@@ -207,8 +198,8 @@ export default function AttendanceReports() {
               <div>
                 <Label htmlFor="studentSelect">Student</Label>
                 <Select 
-                  onValueChange={(value) => setSelectedStudentId(value)} 
-                  value={selectedStudentId}
+                  onValueChange={(value) => setSelectedStudentId(value === ALL_STUDENTS_VALUE ? undefined : value)} 
+                  value={selectedStudentId || ALL_STUDENTS_VALUE}
                 >
                   <SelectTrigger id="studentSelect"><SelectValue placeholder="All Students" /></SelectTrigger>
                   <SelectContent>
@@ -221,8 +212,8 @@ export default function AttendanceReports() {
               <div>
                 <Label htmlFor="classSelect">Class Subject</Label>
                 <Select 
-                  onValueChange={(value) => setSelectedClassId(value)} 
-                  value={selectedClassId}
+                  onValueChange={(value) => setSelectedClassId(value === ALL_CLASSES_VALUE ? undefined : value)} 
+                  value={selectedClassId || ALL_CLASSES_VALUE}
                 >
                   <SelectTrigger id="classSelect"><SelectValue placeholder="All Subjects" /></SelectTrigger>
                   <SelectContent>
@@ -277,4 +268,3 @@ export default function AttendanceReports() {
     </div>
   );
 }
-

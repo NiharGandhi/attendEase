@@ -8,15 +8,23 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { db } from '@/lib/firebase';
-import type { ScheduledClass, Student, Employee, ClassScheduleItem } from '@/lib/types';
+import type { ScheduledClass, Student, Employee, DayOfWeek } from '@/lib/types'; // Removed ClassScheduleItem
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { CalendarDays, User, BookUser, Filter } from 'lucide-react';
-import { daysOfWeekArray, DayOfWeek } from '@/lib/types'; // Import daysOfWeekArray
+import { daysOfWeekArray } from '@/lib/types';
 
 type ViewMode = 'student' | 'teacher';
 
-interface TimetableEntry extends ScheduledClass {
-  specificSchedule: ClassScheduleItem;
+interface TimetableDisplayEntry {
+  id: string; // Original ScheduledClass ID + day for uniqueness
+  subjectName: string;
+  subjectCode?: string;
+  classroomDiplayName?: string;
+  teacherName?: string; // For student view
+  studentCount?: number; // For teacher view
+  dayOfWeek: DayOfWeek;
+  startTime: string;
+  endTime: string;
 }
 
 export default function TimetableView() {
@@ -30,7 +38,7 @@ export default function TimetableView() {
   
   const [viewMode, setViewMode] = useState<ViewMode>('student');
   const [selectedEntityId, setSelectedEntityId] = useState<string | null>(null);
-  const [filteredTimetable, setFilteredTimetable] = useState<TimetableEntry[]>([]);
+  const [filteredTimetable, setFilteredTimetable] = useState<TimetableDisplayEntry[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
@@ -59,10 +67,29 @@ export default function TimetableView() {
         getDocs(teacherQuery),
       ]);
 
-      const fetchedClasses = classSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as ScheduledClass));
+      // Fetch classrooms to map classroomDiplayName
+      const classroomQuery = query(collection(db, 'classrooms'), where('instituteId', '==', instituteId));
+      const classroomSnap = await getDocs(classroomQuery);
+      const fetchedClassrooms = classroomSnap.docs.map(doc => ({ id: doc.id, ...doc.data() as Omit<Classroom, 'id'> }));
+
+
+      const fetchedTeachers = teacherSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Employee));
+      
+      const fetchedClasses = classSnap.docs.map(doc => {
+        const data = doc.data() as ScheduledClass;
+        const classroom = fetchedClassrooms.find(c => c.id === data.classroomId);
+        const teacher = fetchedTeachers.find(t => t.id === data.teacherId);
+        return { 
+            id: doc.id, 
+            ...data,
+            classroomDiplayName: classroom ? `${classroom.roomNumber} - ${classroom.section}` : data.classroomDiplayName || 'N/A',
+            teacherName: teacher ? teacher.name : data.teacherName || 'N/A',
+        } as ScheduledClass;
+      });
+      
       setAllScheduledClasses(fetchedClasses);
       setStudents(studentSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Student)));
-      setTeachers(teacherSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Employee)));
+      setTeachers(fetchedTeachers);
       
     } catch (error) {
       toast({ variant: 'destructive', title: 'Error', description: 'Failed to fetch timetable data.' });
@@ -77,31 +104,36 @@ export default function TimetableView() {
       return;
     }
     
-    let relevantClasses: TimetableEntry[] = [];
+    let relevantEntries: TimetableDisplayEntry[] = [];
 
     allScheduledClasses.forEach(sc => {
-      if (viewMode === 'student' && sc.studentIds && Array.isArray(sc.studentIds) && sc.studentIds.includes(selectedEntityId)) {
-        if (sc.schedules && Array.isArray(sc.schedules)) {
-          sc.schedules.forEach(scheduleItem => {
-            relevantClasses.push({ ...sc, specificSchedule: scheduleItem });
+      const isRelevant = 
+        (viewMode === 'student' && sc.studentIds && Array.isArray(sc.studentIds) && sc.studentIds.includes(selectedEntityId)) ||
+        (viewMode === 'teacher' && sc.teacherId === selectedEntityId);
+
+      if (isRelevant && sc.daysOfWeek && Array.isArray(sc.daysOfWeek)) {
+        sc.daysOfWeek.forEach(day => {
+          relevantEntries.push({
+            id: `${sc.id}-${day}`,
+            subjectName: sc.subjectName,
+            subjectCode: sc.subjectCode,
+            classroomDiplayName: sc.classroomDiplayName,
+            teacherName: sc.teacherName,
+            studentCount: sc.studentIds?.length || 0,
+            dayOfWeek: day,
+            startTime: sc.startTime,
+            endTime: sc.endTime,
           });
-        }
-      } else if (viewMode === 'teacher' && sc.teacherId === selectedEntityId) {
-         if (sc.schedules && Array.isArray(sc.schedules)) {
-            sc.schedules.forEach(scheduleItem => {
-            relevantClasses.push({ ...sc, specificSchedule: scheduleItem });
-            });
-         }
+        });
       }
     });
 
-    // Sort by day and then by start time
-    relevantClasses.sort((a, b) => {
-        const dayComparison = daysOfWeekArray.indexOf(a.specificSchedule.dayOfWeek) - daysOfWeekArray.indexOf(b.specificSchedule.dayOfWeek);
+    relevantEntries.sort((a, b) => {
+        const dayComparison = daysOfWeekArray.indexOf(a.dayOfWeek) - daysOfWeekArray.indexOf(b.dayOfWeek);
         if (dayComparison !== 0) return dayComparison;
-        return a.specificSchedule.startTime.localeCompare(b.specificSchedule.startTime);
+        return a.startTime.localeCompare(b.startTime);
     });
-    setFilteredTimetable(relevantClasses);
+    setFilteredTimetable(relevantEntries);
   }
   
   const handleViewModeChange = (value: string) => {
@@ -188,7 +220,7 @@ export default function TimetableView() {
               </CardHeader>
               <CardContent>
                 {daysOfWeekArray.map(day => {
-                  const classesForDay = filteredTimetable.filter(entry => entry.specificSchedule.dayOfWeek === day);
+                  const classesForDay = filteredTimetable.filter(entry => entry.dayOfWeek === day);
                   if (classesForDay.length === 0) return null;
 
                   return (
@@ -196,10 +228,10 @@ export default function TimetableView() {
                       <h3 className="text-xl font-semibold text-primary mb-3 border-b pb-2">{day}</h3>
                       <ul className="space-y-3">
                         {classesForDay.map(entry => (
-                          <li key={`${entry.id}-${entry.specificSchedule.startTime}`} className="p-4 border rounded-lg shadow-sm bg-card hover:shadow-md transition-shadow">
+                          <li key={entry.id} className="p-4 border rounded-lg shadow-sm bg-card hover:shadow-md transition-shadow">
                             <p className="font-semibold text-lg">{entry.subjectName} {entry.subjectCode && `(${entry.subjectCode})`}</p>
                             <p className="text-sm text-muted-foreground">
-                              Time: {entry.specificSchedule.startTime} - {entry.specificSchedule.endTime}
+                              Time: {entry.startTime} - {entry.endTime}
                             </p>
                             <p className="text-sm text-muted-foreground">
                               Classroom: {entry.classroomDiplayName || 'N/A'}
@@ -208,7 +240,7 @@ export default function TimetableView() {
                                 <p className="text-sm text-muted-foreground">Teacher: {entry.teacherName}</p>
                             )}
                             {viewMode === 'teacher' && (
-                                <p className="text-sm text-muted-foreground">Students: {entry.studentIds.length}</p>
+                                <p className="text-sm text-muted-foreground">Students: {entry.studentCount}</p>
                             )}
                           </li>
                         ))}
@@ -227,4 +259,3 @@ export default function TimetableView() {
     </div>
   );
 }
-

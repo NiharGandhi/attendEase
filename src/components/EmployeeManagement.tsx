@@ -12,19 +12,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
-import { db, auth } from '@/lib/firebase'; // auth imported
-// createUserWithEmailAndPassword can be used if we want to create auth users here
-// For now, we'll just store an email that could be used for an Auth account.
-import { addDoc, collection, query, where, getDocs, serverTimestamp, Timestamp } from 'firebase/firestore';
+import { db, auth } from '@/lib/firebase'; 
+import { addDoc, collection, query, where, getDocs, serverTimestamp, Timestamp, doc, updateDoc } from 'firebase/firestore';
 import { useSearchParams } from 'next/navigation';
 import React, { useEffect, useState } from 'react';
-import { FileUp, PlusCircle, Trash2, UploadCloud } from 'lucide-react'; // Added UploadCloud
+import { FileUp, PlusCircle, Trash2, UploadCloud, Edit3 } from 'lucide-react'; // Added Edit3
 
-// Note: Password field is not included here for simplicity. 
-// Creating users with passwords securely requires more UI/UX.
-// This form assumes an admin might create a placeholder record,
-// and the user would later set/reset their password through a different flow
-// or be invited.
 const employeeFormSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters." }),
   email: z.string().email({ message: "Invalid email address." }),
@@ -40,7 +33,8 @@ export default function EmployeeManagement() {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [showAddForm, setShowAddForm] = useState(action === 'add');
+  const [showForm, setShowForm] = useState(action === 'add');
+  const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
 
   const form = useForm<z.infer<typeof employeeFormSchema>>({
     resolver: zodResolver(employeeFormSchema),
@@ -52,8 +46,11 @@ export default function EmployeeManagement() {
   });
 
   useEffect(() => {
-    setShowAddForm(action === 'add');
-  }, [action]);
+    if (action === 'add' && !editingEmployee) {
+      setShowForm(true);
+      form.reset({ name: '', email: '', role: '' });
+    }
+  }, [action, form, editingEmployee]);
   
   useEffect(() => {
     if (instituteId) {
@@ -81,6 +78,23 @@ export default function EmployeeManagement() {
     }
   }
 
+  const handleEdit = (employee: Employee) => {
+    setEditingEmployee(employee);
+    form.reset({
+      name: employee.name,
+      email: employee.email,
+      role: employee.role,
+    });
+    setShowForm(true);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingEmployee(null);
+    setShowForm(false);
+    form.reset({ name: '', email: '', role: '' });
+  };
+
+
   async function onSubmit(values: z.infer<typeof employeeFormSchema>) {
     if (!instituteId) {
       toast({ variant: 'destructive', title: 'Error', description: 'Institute ID is missing.' });
@@ -88,30 +102,42 @@ export default function EmployeeManagement() {
     }
     setIsSubmitting(true);
     try {
-      // Future: Optionally create a Firebase Auth user here.
-      // For now, just creates the Firestore record.
-      // If creating Auth user:
-      // const userCredential = await createUserWithEmailAndPassword(auth, values.email, "defaultPassword123"); // Handle password securely!
-      // const firebaseUid = userCredential.user.uid;
+      // Note: Email update for an existing Firebase Auth user is more complex and typically requires re-authentication.
+      // This implementation only updates the Firestore record's email.
+      // If values.email !== editingEmployee?.email, an admin might need to manually update Auth or trigger a verification flow.
 
-      const employeeData: Omit<Employee, 'id' | 'createdAt'> & { createdAt: any; firebaseUid?: string } = {
+      const employeeData: Omit<Employee, 'id' | 'createdAt' | 'firebaseUid'> & { createdAt?: any; firebaseUid?: string, updatedAt?: any } = {
         ...values,
         instituteId,
-        createdAt: serverTimestamp(),
-        // firebaseUid: firebaseUid, // If auth user created
       };
-      await addDoc(collection(db, 'employees'), employeeData);
-      toast({ title: 'Employee Added', description: `${values.name} has been added successfully.` });
-      form.reset();
-      setShowAddForm(false);
-      fetchEmployees(); // Refresh list
+
+      if (editingEmployee && editingEmployee.id) {
+        const employeeDocRef = doc(db, 'employees', editingEmployee.id);
+        // Retain existing firebaseUid if present
+        if (editingEmployee.firebaseUid) {
+          employeeData.firebaseUid = editingEmployee.firebaseUid;
+        }
+        employeeData.updatedAt = serverTimestamp();
+        await updateDoc(employeeDocRef, employeeData);
+        toast({ title: 'Employee Updated', description: `${values.name} has been updated.` });
+      } else {
+        // Firebase Auth user creation would go here if this was initial registration with auth link
+        // const userCredential = await createUserWithEmailAndPassword(auth, values.email, "defaultPassword123");
+        // employeeData.firebaseUid = userCredential.user.uid;
+        employeeData.createdAt = serverTimestamp();
+        await addDoc(collection(db, 'employees'), employeeData);
+        toast({ title: 'Employee Added', description: `${values.name} has been added successfully.` });
+      }
+      
+      form.reset({ name: '', email: '', role: '' });
+      setShowForm(false);
+      setEditingEmployee(null);
+      fetchEmployees(); 
     } catch (error: any) {
-      console.error('Error adding employee:', error);
-      let desc = 'Failed to add employee.';
-      if (error.code === 'auth/email-already-in-use') {
+      console.error('Error saving employee:', error);
+      let desc = 'Failed to save employee.';
+      if (error.code === 'auth/email-already-in-use' && !editingEmployee) { // Only for new user creation
         desc = 'This email is already in use by another authenticated account.';
-      } else if (error.code === 'auth/weak-password') {
-        desc = 'The password provided is too weak.';
       }
       toast({ variant: 'destructive', title: 'Error', description: desc });
     } finally {
@@ -120,8 +146,6 @@ export default function EmployeeManagement() {
   }
   
   const handleBatchUpload = () => {
-    // Placeholder for batch upload functionality
-    // In a real app, this would open a file dialog, parse a CSV/Excel, etc.
     toast({ title: "Batch Upload Employees", description: "This feature is coming soon! You'll be able to upload a CSV file to add multiple employees at once."});
   }
 
@@ -134,19 +158,27 @@ export default function EmployeeManagement() {
       <Card className="shadow-xl">
         <CardHeader className="flex flex-row items-center justify-between">
             <div>
-                <CardTitle className="text-2xl">Manage Employees</CardTitle>
+                <CardTitle className="text-2xl">{editingEmployee ? 'Edit Employee' : 'Manage Employees'}</CardTitle>
                 <CardDescription>Add, view, or batch upload institute staff.</CardDescription>
             </div>
             <div className="flex gap-2">
-                <Button variant="outline" onClick={() => setShowAddForm(!showAddForm)}>
-                    <PlusCircle className="mr-2 h-4 w-4" /> {showAddForm ? 'Cancel' : 'Add Employee'}
+                <Button variant="outline" onClick={() => {
+                  if (showForm) {
+                    handleCancelEdit();
+                  } else {
+                    setEditingEmployee(null);
+                    form.reset({ name: '', email: '', role: '' });
+                    setShowForm(true);
+                  }
+                }}>
+                    <PlusCircle className="mr-2 h-4 w-4" /> {showForm ? 'Cancel' : 'Add Employee'}
                 </Button>
                 <Button variant="outline" onClick={handleBatchUpload}>
                     <UploadCloud className="mr-2 h-4 w-4" /> Batch Upload Employees
                 </Button>
             </div>
         </CardHeader>
-        {showAddForm && (
+        {showForm && (
             <CardContent>
             <Form {...form}>
                 <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 p-4 border rounded-md">
@@ -167,7 +199,8 @@ export default function EmployeeManagement() {
                     render={({ field }) => (
                     <FormItem>
                         <FormLabel>Email Address</FormLabel>
-                        <FormControl><Input type="email" placeholder="john.doe@example.com" {...field} /></FormControl>
+                        <FormControl><Input type="email" placeholder="john.doe@example.com" {...field} disabled={!!editingEmployee} /></FormControl>
+                        {editingEmployee && <FormDescription>Email cannot be changed after creation for existing users.</FormDescription>}
                         <FormMessage />
                     </FormItem>
                     )}
@@ -178,7 +211,7 @@ export default function EmployeeManagement() {
                     render={({ field }) => (
                     <FormItem>
                         <FormLabel>Role</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <Select onValueChange={field.onChange} value={field.value}>
                         <FormControl><SelectTrigger><SelectValue placeholder="Select a role" /></SelectTrigger></FormControl>
                         <SelectContent>
                             <SelectItem value="teacher">Teacher</SelectItem>
@@ -190,22 +223,8 @@ export default function EmployeeManagement() {
                     </FormItem>
                     )}
                 />
-                {/* 
-                Future: Add password field if creating Auth user directly here
-                <FormField
-                    control={form.control}
-                    name="password" // Add to schema if used
-                    render={({ field }) => (
-                    <FormItem>
-                        <FormLabel>Password (temporary)</FormLabel>
-                        <FormControl><Input type="password" placeholder="Min. 6 characters" {...field} /></FormControl>
-                        <FormMessage />
-                    </FormItem>
-                    )}
-                /> 
-                */}
                 <Button type="submit" className="w-full" disabled={isSubmitting}>
-                    {isSubmitting ? 'Adding...' : 'Add Employee'}
+                    {isSubmitting ? (editingEmployee ? 'Updating...' : 'Adding...') : (editingEmployee ? 'Update Employee' : 'Add Employee')}
                 </Button>
                 </form>
             </Form>
@@ -244,9 +263,12 @@ export default function EmployeeManagement() {
                             ? employee.createdAt.toDate().toLocaleDateString() 
                             : 'N/A'}
                     </TableCell>
-                    <TableCell className="text-right">
-                      <Button variant="ghost" size="icon" onClick={() => toast({title: "Edit", description: "Edit functionality coming soon."})}>
-                        <Trash2 className="h-4 w-4 text-destructive" /> {/* Placeholder for edit/delete */}
+                    <TableCell className="text-right space-x-1">
+                      <Button variant="ghost" size="icon" onClick={() => handleEdit(employee)} title="Edit Employee">
+                        <Edit3 className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon" onClick={() => toast({title: "Delete", description: "Delete functionality coming soon."})} title="Delete Employee">
+                        <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>
                     </TableCell>
                   </TableRow>

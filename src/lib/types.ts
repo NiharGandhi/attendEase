@@ -58,17 +58,17 @@ export enum DayOfWeek {
 export const daysOfWeekArray = Object.values(DayOfWeek);
 
 
-export interface TimeSlot {
+export interface TimeSlot { // This might become less used if classes have single start/end times
   startTime: string; // HH:mm format
   endTime: string;   // HH:mm format
 }
 
-export interface ClassScheduleItem {
-  dayOfWeek: DayOfWeek;
-  startTime: string; // HH:mm format
-  endTime: string;   // HH:mm format
-  // No need for TimeSlot interface here, direct properties are fine.
-}
+// This interface is being replaced by direct properties on ScheduledClass for the new model
+// export interface ClassScheduleItem {
+//   dayOfWeek: DayOfWeek;
+//   startTime: string; // HH:mm format
+//   endTime: string;   // HH:mm format
+// }
 
 export interface ScheduledClass {
   id?: string; // Firestore document ID
@@ -80,7 +80,10 @@ export interface ScheduledClass {
   teacherId?: string; // Employee ID
   teacherName?: string; // Denormalized for display
   studentIds: string[]; // Array of Student Firestore IDs enrolled in this class
-  schedules: ClassScheduleItem[]; // Array of day/time slots for this class
+  // Old structure: schedules: ClassScheduleItem[];
+  daysOfWeek: DayOfWeek[]; // New: Array of days this class occurs
+  startTime: string; // New: Single start time for all occurrences
+  endTime: string;   // New: Single end time for all occurrences
   createdAt?: Timestamp;
 }
 
@@ -88,9 +91,8 @@ export interface AttendanceRecord {
   id?: string; // Firestore document ID
   instituteId: string;
   scheduledClassId: string; // ID of the ScheduledClass instance
-  // specificSchedule: ClassScheduleItem; // Could store the specific schedule instance if needed
   studentFirebaseId: string; // The Student's Firestore document ID
-  timestamp: Timestamp; // Date and time of the attendance, effectively identifying the slot
+  timestamp: Timestamp; // Date and time of the attendance mark
   status: 'present' | 'absent';
   recognizedAt?: Timestamp; // Time of recognition if facial
   method?: 'manual' | 'facial_recognition';
@@ -102,10 +104,8 @@ export type EmployeeFormData = Omit<Employee, 'id' | 'instituteId' | 'createdAt'
 export type ClassroomFormData = Omit<Classroom, 'id' | 'instituteId' | 'createdAt'>;
 export type StudentFormData = Omit<Student, 'id' | 'instituteId' | 'imageUrl' | 'faceToken' | 'createdAt'>;
 
-// For ScheduledClass form, schedules will be handled by useFieldArray
-export type ScheduledClassFormData = Omit<ScheduledClass, 'id' | 'createdAt' | 'classroomDiplayName' | 'teacherName' | 'schedules'> & {
-  schedules: Array<{ dayOfWeek?: DayOfWeek; startTime?: string; endTime?: string; }>; // Looser type for form before validation
-};
+
+export type ScheduledClassFormData = Omit<ScheduledClass, 'id' | 'createdAt' | 'classroomDiplayName' | 'teacherName'>;
 
 
 export const instituteSettingsFormSchema = z.object({
@@ -127,20 +127,24 @@ export function timeToMinutes(time: string): number {
     return hours * 60 + minutes;
 }
 
+// Simplified conflict check for two schedules with single start/end times on potentially overlapping days
 export function checkScheduleConflict(
-    schedule1: { dayOfWeek: DayOfWeek; startTime: string; endTime: string },
-    schedule2: { dayOfWeek: DayOfWeek; startTime: string; endTime: string }
+    days1: DayOfWeek[], startTime1Str: string, endTime1Str: string,
+    days2: DayOfWeek[], startTime2Str: string, endTime2Str: string
 ): boolean {
-    if (schedule1.dayOfWeek !== schedule2.dayOfWeek) {
-        return false; // Different days, no conflict
+    const commonDays = days1.filter(day => days2.includes(day));
+    if (commonDays.length === 0) {
+        return false; // No common days, no conflict
     }
 
-    const startTime1 = timeToMinutes(schedule1.startTime);
-    const endTime1 = timeToMinutes(schedule1.endTime);
-    const startTime2 = timeToMinutes(schedule2.startTime);
-    const endTime2 = timeToMinutes(schedule2.endTime);
+    const startTime1 = timeToMinutes(startTime1Str);
+    const endTime1 = timeToMinutes(endTime1Str);
+    const startTime2 = timeToMinutes(startTime2Str);
+    const endTime2 = timeToMinutes(endTime2Str);
 
     // Check for overlap:
-    // They overlap if one starts before the other ends, and the other starts before the first one ends.
-    return startTime1 < endTime2 && startTime2 < endTime1;
+    // They overlap if one starts before the other ends, AND the other starts before the first one ends.
+    const timeOverlap = startTime1 < endTime2 && startTime2 < endTime1;
+    
+    return timeOverlap; // Conflict if there's a common day AND time overlap
 }

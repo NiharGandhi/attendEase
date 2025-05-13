@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useEffect, useRef, useState } from 'react';
@@ -6,30 +7,21 @@ import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Camera, Users, CheckCircle, XCircle, Loader2, AlertTriangle, CalendarClock } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'; // Keep for classroom selection
+import { Input } from '@/components/ui/input'; // For classroom input
+import { Camera, Users, CheckCircle, XCircle, Loader2, AlertTriangle, CalendarClock, Search } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
-import type { Student, AttendanceRecord, ScheduledClass, Classroom, ClassScheduleItem } from '@/lib/types';
+import type { Student, AttendanceRecord, ScheduledClass, Classroom, DayOfWeek } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { collection, query, where, getDocs, serverTimestamp, addDoc, Timestamp, doc, writeBatch, getDoc as firestoreGetDoc } from 'firebase/firestore';
 import { searchFaceAction, getInstituteFacesetToken } from '@/actions/faceplusplus';
+import { daysOfWeekArray, timeToMinutes } from '@/lib/types'; // Import utilities
 
 interface RecognizedStudentInfo extends Student {
   status: 'present' | 'unknown' | 'absent';
   recognizedAt?: Timestamp;
   confidence?: number;
 }
-
-interface ClassOccurrence {
-  id: string; // Composite key: scheduledClassId + scheduleIndex
-  scheduledClassId: string;
-  scheduleItem: ClassScheduleItem;
-  displayText: string;
-  studentIds: string[]; // Keep studentIds for fetching
-  subjectName: string;
-  classroomDiplayName?: string;
-}
-
 
 export default function AttendanceTracking() {
   const { toast } = useToast();
@@ -41,14 +33,16 @@ export default function AttendanceTracking() {
   const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
   const [isTracking, setIsTracking] = useState(false);
   
-  const [selectedClassOccurrenceId, setSelectedClassOccurrenceId] = useState<string | null>(null);
   const [allScheduledClasses, setAllScheduledClasses] = useState<ScheduledClass[]>([]);
-  const [classOccurrences, setClassOccurrences] = useState<ClassOccurrence[]>([]);
+  const [allClassrooms, setAllClassrooms] = useState<Classroom[]>([]);
+  const [selectedClassroomId, setSelectedClassroomId] = useState<string | null>(null);
+  const [currentActiveClass, setCurrentActiveClass] = useState<ScheduledClass | null>(null);
 
   const [studentsForSession, setStudentsForSession] = useState<Student[]>([]);
   const [sessionAttendance, setSessionAttendance] = useState<Map<string, RecognizedStudentInfo>>(new Map());
   
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isFindingClass, setIsFindingClass] = useState(false);
   const [instituteFacesetToken, setInstituteFacesetToken] = useState<string | null>(null);
   
   const attendanceIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -56,24 +50,21 @@ export default function AttendanceTracking() {
 
   useEffect(() => {
     if (instituteId) {
-      fetchInitialData();
+      fetchInitialData(); // Fetches all classrooms and all scheduled classes
       fetchFacesetToken();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [instituteId]);
   
   useEffect(() => {
-    if (selectedClassOccurrenceId && instituteId) {
-        const occurrence = classOccurrences.find(co => co.id === selectedClassOccurrenceId);
-        if (occurrence) {
-            fetchStudentsForClassOccurrence(occurrence);
-        }
+    if (currentActiveClass && instituteId) {
+        fetchStudentsForClass(currentActiveClass);
     } else {
       setStudentsForSession([]);
       setSessionAttendance(new Map());
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedClassOccurrenceId, instituteId, classOccurrences]);
+  }, [currentActiveClass, instituteId]);
 
 
   useEffect(() => {
@@ -118,11 +109,16 @@ export default function AttendanceTracking() {
     if (!instituteId) return;
     try {
       const classroomQuery = query(collection(db, 'classrooms'), where('instituteId', '==', instituteId));
-      const classroomSnap = await getDocs(classroomQuery);
-      const fetchedClassrooms = classroomSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Classroom));
-
       const scheduledClassQuery = query(collection(db, 'scheduledClasses'), where('instituteId', '==', instituteId));
-      const scheduledClassSnap = await getDocs(scheduledClassQuery);
+      
+      const [classroomSnap, scheduledClassSnap] = await Promise.all([
+        getDocs(classroomQuery),
+        getDocs(scheduledClassQuery),
+      ]);
+
+      const fetchedClassrooms = classroomSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Classroom));
+      setAllClassrooms(fetchedClassrooms);
+
       const fetchedScheduledClasses = scheduledClassSnap.docs.map(d => {
         const data = d.data() as ScheduledClass;
         const classroom = fetchedClassrooms.find(c => c.id === data.classroomId);
@@ -134,47 +130,30 @@ export default function AttendanceTracking() {
       });
       setAllScheduledClasses(fetchedScheduledClasses);
 
-      // Generate Class Occurrences for the dropdown
-      const occurrences: ClassOccurrence[] = [];
-      fetchedScheduledClasses.forEach(sc => {
-        (sc.schedules || []).forEach((scheduleItem, index) => { // Ensure schedules is an array
-          occurrences.push({
-            id: `${sc.id}_${index}`, // Composite key
-            scheduledClassId: sc.id!,
-            scheduleItem,
-            displayText: `${sc.subjectName} (${sc.classroomDiplayName || 'N/A'}) - ${scheduleItem.dayOfWeek} ${scheduleItem.startTime}-${scheduleItem.endTime}`,
-            studentIds: sc.studentIds || [], // Ensure studentIds is an array
-            subjectName: sc.subjectName,
-            classroomDiplayName: sc.classroomDiplayName
-          });
-        });
-      });
-      setClassOccurrences(occurrences);
-
     } catch (error) {
       toast({ variant: 'destructive', title: 'Error', description: 'Failed to fetch initial attendance data.' });
       console.error("AttendanceTracking - fetchInitialData error:", error);
     }
   }
   
-  async function fetchStudentsForClassOccurrence(occurrence: ClassOccurrence) {
-    if (!instituteId || !occurrence.studentIds || occurrence.studentIds.length === 0) {
+  async function fetchStudentsForClass(activeClass: ScheduledClass) {
+    if (!instituteId || !activeClass.studentIds || activeClass.studentIds.length === 0) {
         setStudentsForSession([]);
         setSessionAttendance(new Map());
-        if(occurrence.studentIds && occurrence.studentIds.length === 0) {
-            toast({ variant: 'default', title: 'No Students', description: 'No students are enrolled in this selected class occurrence.' });
+        if(activeClass.studentIds && activeClass.studentIds.length === 0) {
+            toast({ variant: 'default', title: 'No Students', description: 'No students are enrolled in this class.' });
         }
         return;
     }
 
     try {
-        const studentDetailsPromises = occurrence.studentIds.map(studentId =>
+        const studentDetailsPromises = activeClass.studentIds.map(studentId =>
             firestoreGetDoc(doc(db, "students", studentId))
         );
         const studentDocs = await Promise.all(studentDetailsPromises);
         
         const fetchedStudents = studentDocs
-            .filter(docSnap => docSnap.exists() && docSnap.data()?.faceToken)
+            .filter(docSnap => docSnap.exists() && docSnap.data()?.faceToken) // Only include students with face tokens
             .map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as Student));
         
         setStudentsForSession(fetchedStudents); 
@@ -188,21 +167,57 @@ export default function AttendanceTracking() {
         setSessionAttendance(initialAttendance);
 
     } catch (error) {
-        console.error("Error fetching students for class occurrence:", error);
-        toast({ variant: "destructive", title: "Error", description: "Failed to load students for the selected class occurrence." });
+        console.error("Error fetching students for class:", error);
+        toast({ variant: "destructive", title: "Error", description: "Failed to load students for the class." });
     }
   }
 
+  const findAndSetCurrentClass = async () => {
+    if (!selectedClassroomId || !instituteId) {
+      toast({ variant: 'destructive', title: 'Missing Info', description: 'Please select a classroom.' });
+      return;
+    }
+    setIsFindingClass(true);
+    setCurrentActiveClass(null); // Reset previous active class
+
+    const now = new Date();
+    const currentDay = daysOfWeekArray[now.getDay() === 0 ? 6 : now.getDay() - 1] as DayOfWeek; // Sunday is 0, Monday is 1 etc.
+    const currentTimeInMinutes = now.getHours() * 60 + now.getMinutes();
+
+    const potentialClasses = allScheduledClasses.filter(sc => {
+      if (sc.classroomId !== selectedClassroomId) return false;
+      if (!sc.daysOfWeek || !sc.daysOfWeek.includes(currentDay)) return false;
+      
+      const classStartTimeInMinutes = timeToMinutes(sc.startTime);
+      const classEndTimeInMinutes = timeToMinutes(sc.endTime);
+
+      return currentTimeInMinutes >= classStartTimeInMinutes && currentTimeInMinutes < classEndTimeInMinutes;
+    });
+
+    if (potentialClasses.length === 1) {
+      setCurrentActiveClass(potentialClasses[0]);
+      toast({ title: 'Class Found', description: `Current class: ${potentialClasses[0].subjectName} in ${potentialClasses[0].classroomDiplayName}` });
+    } else if (potentialClasses.length > 1) {
+      // TODO: Handle multiple classes in the same room at the same time (e.g., prompt user to select)
+      // For now, take the first one or show an error.
+      setCurrentActiveClass(potentialClasses[0]); // Or handle ambiguity
+      toast({ variant: 'default', title: 'Multiple Classes Found', description: `Multiple classes ongoing. Selected ${potentialClasses[0].subjectName}. Please verify.` });
+    } else {
+      toast({ variant: 'destructive', title: 'No Class Found', description: 'No class scheduled in this classroom at the current time.' });
+    }
+    setIsFindingClass(false);
+  };
+
+
   const captureFrameAndRecognize = async () => {
-    const currentOccurrence = classOccurrences.find(co => co.id === selectedClassOccurrenceId);
-    if (!videoRef.current || !canvasRef.current || !hasCameraPermission || !currentOccurrence || studentsForSession.length === 0 || !instituteFacesetToken || !instituteId) {
-      if (isTracking && (!currentOccurrence || studentsForSession.length === 0)) {
-        toast({variant: 'destructive', title: "Cannot Track", description: "Please select a class occurrence with enrolled, face-registered students."});
+    if (!videoRef.current || !canvasRef.current || !hasCameraPermission || !currentActiveClass || studentsForSession.length === 0 || !instituteFacesetToken || !instituteId) {
+      if (isTracking && (!currentActiveClass || studentsForSession.length === 0)) {
+        toast({variant: 'destructive', title: "Cannot Track", description: "No active class or no face-registered students for this class."});
       }
       if (isTracking && !instituteFacesetToken) {
         toast({variant: 'destructive', title: "Configuration Error", description: "Institute FaceSet token not found. Tracking disabled."});
       }
-      if(isTracking) setIsTracking(false); // Stop tracking if pre-conditions fail
+      if(isTracking) setIsTracking(false); 
       setIsProcessing(false);
       return;
     }
@@ -248,13 +263,12 @@ export default function AttendanceTracking() {
   };
 
   const startTracking = () => {
-    const currentOccurrence = classOccurrences.find(co => co.id === selectedClassOccurrenceId);
-    if (!currentOccurrence) {
-        toast({ variant: "destructive", title: "No Class Selected", description: "Please select a class occurrence." });
+    if (!currentActiveClass) {
+        toast({ variant: "destructive", title: "No Active Class", description: "Please find an active class for the selected classroom first." });
         return;
     }
     if (studentsForSession.length === 0) {
-        toast({ variant: "destructive", title: "No Registered Students", description: "No students with registered faces found for this class occurrence, or no students enrolled. Add students and upload their photos first." });
+        toast({ variant: "destructive", title: "No Registered Students", description: "No students with registered faces found for this class, or no students enrolled." });
         return;
     }
     if (!instituteFacesetToken) {
@@ -272,7 +286,7 @@ export default function AttendanceTracking() {
 
     captureFrameAndRecognize(); 
     attendanceIntervalRef.current = setInterval(captureFrameAndRecognize, 30 * 1000); 
-    toast({ title: 'Attendance Tracking Started', description: `For: ${currentOccurrence.displayText}` });
+    toast({ title: 'Attendance Tracking Started', description: `For: ${currentActiveClass.subjectName}` });
   };
 
   const stopTracking = async () => {
@@ -282,8 +296,7 @@ export default function AttendanceTracking() {
       attendanceIntervalRef.current = null;
     }
     
-    const currentOccurrence = classOccurrences.find(co => co.id === selectedClassOccurrenceId);
-    if (instituteId && currentOccurrence && sessionAttendance.size > 0) {
+    if (instituteId && currentActiveClass && sessionAttendance.size > 0) {
         const batch = writeBatch(db);
         const attendanceDate = new Date(); 
         
@@ -292,8 +305,7 @@ export default function AttendanceTracking() {
                 const recordRef = doc(collection(db, 'attendanceRecords'));
                 const attendanceData: Omit<AttendanceRecord, 'id'> = {
                     instituteId,
-                    scheduledClassId: currentOccurrence.scheduledClassId,
-                    // specificSchedule: currentOccurrence.scheduleItem, // Optional: if you need to store the exact slot
+                    scheduledClassId: currentActiveClass.id!,
                     studentFirebaseId: studentId,
                     timestamp: Timestamp.fromDate(attendanceDate), 
                     status: 'present',
@@ -311,6 +323,11 @@ export default function AttendanceTracking() {
             toast({ variant: 'destructive', title: 'Save Error', description: 'Could not save attendance records.' });
         }
     }
+    // Optionally reset currentActiveClass and selectedClassroomId here if desired
+    // setCurrentActiveClass(null);
+    // setSelectedClassroomId(null);
+    // setStudentsForSession([]);
+    // setSessionAttendance(new Map());
     toast({ title: 'Attendance Tracking Stopped' });
   };
 
@@ -319,7 +336,6 @@ export default function AttendanceTracking() {
   }
   
   const displayedStudents = Array.from(sessionAttendance.values());
-  const currentSelectedOccurrenceDetails = classOccurrences.find(co => co.id === selectedClassOccurrenceId);
 
   return (
     <div className="space-y-6">
@@ -335,7 +351,7 @@ export default function AttendanceTracking() {
       <Card className="shadow-xl">
         <CardHeader>
           <CardTitle className="text-2xl flex items-center"><Camera className="mr-2 h-6 w-6 text-primary"/>Live Attendance Tracking</CardTitle>
-          <CardDescription>Select a specific class occurrence to begin facial recognition based attendance.</CardDescription>
+          <CardDescription>Select a classroom to automatically find the current class and begin attendance.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid md:grid-cols-2 gap-6 items-start">
@@ -355,22 +371,31 @@ export default function AttendanceTracking() {
               </Card>
               <canvas ref={canvasRef} style={{ display: 'none' }} />
               
+              <div className="flex flex-col sm:flex-row gap-2 items-end">
+                <div className="flex-grow">
+                  <Label htmlFor="classroom-select">Classroom</Label>
+                  <Select onValueChange={setSelectedClassroomId} value={selectedClassroomId || ""} disabled={isTracking || isFindingClass}>
+                    <SelectTrigger id="classroom-select" className="w-full min-w-[200px]">
+                      <SelectValue placeholder="Select Classroom" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {allClassrooms.length === 0 && <SelectItem value="no-classrooms" disabled>No classrooms found</SelectItem>}
+                      {allClassrooms.map(cr => (
+                          <SelectItem key={cr.id} value={cr.id!}>
+                              {cr.roomNumber} - {cr.section}
+                          </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                 <Button onClick={findAndSetCurrentClass} disabled={!selectedClassroomId || isTracking || isFindingClass} className="w-full sm:w-auto">
+                   <Search className="mr-2 h-4 w-4" /> {isFindingClass ? "Finding..." : "Find Current Class"}
+                 </Button>
+              </div>
+
               <div className="flex flex-col sm:flex-row gap-2">
-                <Select onValueChange={setSelectedClassOccurrenceId} value={selectedClassOccurrenceId || ""} disabled={isTracking}>
-                  <SelectTrigger className="w-full sm:w-auto min-w-[300px] flex-grow">
-                    <SelectValue placeholder="Select Class Occurrence" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {classOccurrences.length === 0 && <SelectItem value="no-occurrences" disabled>No class occurrences found</SelectItem>}
-                    {classOccurrences.map(co => (
-                        <SelectItem key={co.id} value={co.id!}>
-                            {co.displayText}
-                        </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
                 {!isTracking ? (
-                  <Button onClick={startTracking} disabled={!hasCameraPermission || !selectedClassOccurrenceId || isProcessing || !instituteFacesetToken} className="w-full sm:w-auto bg-accent hover:bg-accent/90 text-accent-foreground">
+                  <Button onClick={startTracking} disabled={!hasCameraPermission || !currentActiveClass || isProcessing || !instituteFacesetToken || isFindingClass} className="w-full sm:w-auto bg-accent hover:bg-accent/90 text-accent-foreground">
                     <CalendarClock className="mr-2 h-4 w-4" /> Start Tracking
                   </Button>
                 ) : (
@@ -385,19 +410,19 @@ export default function AttendanceTracking() {
             <Card className="h-full shadow-md">
               <CardHeader>
                 <CardTitle className="flex items-center"><Users className="mr-2 h-5 w-5 text-primary" /> Session Attendance</CardTitle>
-                {currentSelectedOccurrenceDetails ? (
+                {currentActiveClass ? (
                     <CardDescription>
-                        Status for: {currentSelectedOccurrenceDetails.subjectName} ({currentSelectedOccurrenceDetails.classroomDiplayName})
-                        <br/>{currentSelectedOccurrenceDetails.scheduleItem.dayOfWeek}, {currentSelectedOccurrenceDetails.scheduleItem.startTime} - {currentSelectedOccurrenceDetails.scheduleItem.endTime}
+                        Status for: {currentActiveClass.subjectName} ({currentActiveClass.classroomDiplayName})
+                        <br/>{currentActiveClass.daysOfWeek.join(', ')}, {currentActiveClass.startTime} - {currentActiveClass.endTime}
                         <br/>Only face-registered, enrolled students listed.
                     </CardDescription>
                 ) : (
-                    <CardDescription>Select a class occurrence to view student status.</CardDescription>
+                    <CardDescription>Select a classroom and find the current class to view student status.</CardDescription>
                 )}
               </CardHeader>
               <CardContent className="max-h-[400px] overflow-y-auto">
-                {!selectedClassOccurrenceId && <p className="text-muted-foreground">Please select a class occurrence.</p>}
-                {selectedClassOccurrenceId && !isTracking && displayedStudents.length === 0 && <p className="text-muted-foreground">Start tracking or check student enrollment & face registration.</p>}
+                {!currentActiveClass && <p className="text-muted-foreground">Please select a classroom and find an active class.</p>}
+                {currentActiveClass && !isTracking && displayedStudents.length === 0 && <p className="text-muted-foreground">Start tracking or check student enrollment & face registration for this class.</p>}
                 {isTracking && displayedStudents.length === 0 && !isProcessing && <p className="text-muted-foreground">No face-registered students loaded for this class or initial scan pending.</p>}
                 
                 <ul className="space-y-2">
