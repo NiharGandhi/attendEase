@@ -11,11 +11,11 @@ import { Form, FormControl, FormDescription as FormDesc, FormField, FormItem, Fo
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { db, storage } from '@/lib/firebase';
-import { doc, getDoc, updateDoc } from 'firebase/firestore'; // Removed serverTimestamp as not used
+import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import type { Institute, InstituteSettingsFormData } from '@/lib/types';
 import { instituteSettingsFormSchema } from '@/lib/types';
-import { UploadCloud, Building, LinkIcon as LinkExternalIcon, Save, Settings2, Webhook } from 'lucide-react'; // Renamed LinkIcon
+import { UploadCloud, Building, LinkIcon as LinkExternalIcon, Save, Settings2, Webhook, DatabaseZap } from 'lucide-react';
 import Image from 'next/image';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 
@@ -91,7 +91,7 @@ export default function InstituteSettings() {
         address: values.address,
         contactEmail: values.contactEmail,
         contactPhone: values.contactPhone,
-        webhookUrl: values.webhookUrl || '', // Store empty string if undefined
+        webhookUrl: values.webhookUrl || null, // Store null if empty or undefined
       };
       await updateDoc(instituteRef, dataToUpdate);
       toast({ title: 'Settings Updated', description: 'Institute details saved successfully.' });
@@ -153,7 +153,7 @@ export default function InstituteSettings() {
                 {institute.logoUrl && (
                   <div className="mb-4 p-4 border rounded-md bg-muted/30 inline-block">
                     <p className="font-medium mb-2 text-sm">Current Logo:</p>
-                    <Image src={institute.logoUrl} alt={`${institute.name} Logo`} width={120} height={120} className="rounded-md border object-contain bg-background shadow-sm" data-ai-hint="institute logo"/>
+                    <Image src={institute.logoUrl} alt={`${institute.name} Logo`} width={120} height={120} className="rounded-md border object-contain bg-background shadow-sm" data-ai-hint="institute logo" unoptimized/>
                   </div>
                 )}
                 <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
@@ -174,21 +174,22 @@ export default function InstituteSettings() {
 
       <Card className="shadow-xl border-t-4 border-accent">
         <CardHeader>
-          <CardTitle className="text-2xl flex items-center gap-2"><Webhook className="h-6 w-6 text-accent"/>Webhook & Integrations</CardTitle>
-          <CardDescription>Configure webhooks for data export and manage external system integrations.</CardDescription>
+          <CardTitle className="text-2xl flex items-center gap-2"><Webhook className="h-6 w-6 text-accent"/>External Integrations & Data Export</CardTitle>
+          <CardDescription>Configure webhooks, and learn about upcoming API and system integrations.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-           <Form {...form}> {/* Use the same form instance for simplicity, or create a separate one if complex */}
+           <Form {...form}> {/* Use the same form instance */}
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
                 <FormField
                     control={form.control}
                     name="webhookUrl"
                     render={({ field }) => (
                     <FormItem>
-                        <FormLabel>Webhook URL for Attendance Data</FormLabel>
+                        <FormLabel>Attendance Data Webhook URL</FormLabel>
                         <FormControl><Input type="url" placeholder="https://your-service.com/webhook-receiver" {...field} value={field.value ?? ''} /></FormControl>
                         <FormDesc>
-                            If configured, AttendEase will POST attendance data to this URL when manually triggered from the reports page.
+                            If configured, AttendEase will POST attendance data (upon manual trigger from reports page) to this URL. 
+                            This allows you to integrate attendance information into your custom dashboards or external systems. Ensure the endpoint can handle JSON payloads.
                         </FormDesc>
                         <FormMessage />
                     </FormItem>
@@ -202,29 +203,52 @@ export default function InstituteSettings() {
 
             <Alert variant="default" className="bg-accent/10 border-accent/30 mt-8">
                 <LinkExternalIcon className="h-5 w-5 text-accent" />
-                <AlertTitle className="text-accent font-semibold">LMS Integration (Coming Soon)</AlertTitle>
+                <AlertTitle className="text-accent font-semibold">LMS Integration (Planned)</AlertTitle>
                 <AlertDescription className="text-accent/80">
-                    We are actively developing integrations with popular Learning Management Systems like Brightspace, Moodle, Canvas, and others. 
+                    We are actively developing integrations with popular Learning Management Systems (LMS) like Brightspace, Moodle, Canvas, and others. 
                     This will enable seamless synchronization of student rosters, class schedules, and attendance data, reducing manual data entry and ensuring consistency across platforms.
                     Stay tuned for updates on specific LMS connectors and availability!
                 </AlertDescription>
             </Alert>
-
+            
             <Alert variant="default" className="bg-secondary/50 border-secondary/70">
                 <Settings2 className="h-5 w-5 text-secondary-foreground" />
-                <AlertTitle className="text-secondary-foreground font-semibold">API & Webhooks for Custom Integrations (Future Development)</AlertTitle>
+                <AlertTitle className="text-secondary-foreground font-semibold">Developer API (Planned)</AlertTitle>
                 <AlertDescription className="text-muted-foreground">
-                    AttendEase aims to provide a flexible integration pathway for your institution&apos;s unique ecosystem. We are planning to develop:
-                    <ul className="list-disc list-inside mt-2 space-y-1">
-                        <li><strong>RESTful API:</strong> A comprehensive API will allow your developers to programmatically access and manage data within AttendEase, including student information, class schedules, and attendance records. This can be used to build custom dashboards, automate administrative tasks, or synchronize with proprietary internal systems.</li>
-                        <li><strong>Webhooks:</strong> Configure webhooks to receive real-time notifications about events in AttendEase (e.g., new student registration, attendance session completion). This enables your other applications to react instantly to changes, facilitating automated workflows and data synchronization.</li>
+                    A comprehensive RESTful API is planned for future development. This API will allow your developers to programmatically access and manage data within AttendEase, including student information, class schedules, attendance records, and more. 
+                    This will empower you to build custom dashboards, automate administrative tasks, or integrate AttendEase deeply with your proprietary internal systems.
+                    <br/>
+                    <strong>Key features will include:</strong>
+                    <ul className="list-disc list-inside mt-1 space-y-0.5 text-xs">
+                        <li>Secure, token-based authentication.</li>
+                        <li>Endpoints for CRUD (Create, Read, Update, Delete) operations on core data entities.</li>
+                        <li>Query capabilities to filter and retrieve specific data sets.</li>
+                        <li>Webhooks for real-time event notifications (e.g., new student registration, attendance session completion) allowing your other applications to react instantly.</li>
                     </ul>
-                     <p className="mt-2">This will provide the tools needed for deeper integration with student information systems (SIS), HR platforms, or other institutional software. Detailed developer documentation will be provided upon release.</p>
+                    <p className="mt-1 text-xs">Detailed developer documentation will be provided upon release.</p>
                 </AlertDescription>
             </Alert>
+
+            <Alert variant="default" className="bg-blue-50 border-blue-200 text-blue-700">
+                <DatabaseZap className="h-5 w-5 !text-blue-700" />
+                <AlertTitle className="font-semibold !text-blue-700">Student Information System (SIS) Integration (Planned)</AlertTitle>
+                <AlertDescription className="!text-blue-700/90">
+                    We understand the importance of integrating with your central Student Information System. 
+                    Future development will focus on providing pathways for synchronization with common SIS platforms.
+                    This could involve:
+                     <ul className="list-disc list-inside mt-1 space-y-0.5 text-xs">
+                        <li>Automated import/sync of student rosters and course enrollments from your SIS.</li>
+                        <li>Export of attendance data back to your SIS for official record-keeping and reporting.</li>
+                        <li>Standardized data formats (e.g., CSV, LIS) and potential direct API integrations where feasible.</li>
+                    </ul>
+                    <p className="mt-1 text-xs">Our goal is to make AttendEase a complementary tool that enhances your existing SIS by automating the attendance process.</p>
+                </AlertDescription>
+            </Alert>
+
         </CardContent>
       </Card>
 
     </div>
   );
 }
+

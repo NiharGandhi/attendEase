@@ -9,7 +9,7 @@ export interface Institute {
   contactEmail: string;
   contactPhone: string;
   logoUrl?: string; // URL for the institute's logo
-  webhookUrl?: string; // URL for webhook data export
+  webhookUrl?: string | null; // URL for webhook data export, can be null
   createdAt?: Timestamp;
   adminUid?: string;
   facesetToken?: string; // Face++ FaceSet Token
@@ -63,7 +63,6 @@ export const daysOfWeekArray = Object.values(DayOfWeek);
 
 
 // This interface defines a single scheduled time slot for a class.
-// A class can have multiple such items if it meets on different days/times.
 export interface ClassScheduleItem {
   dayOfWeek: DayOfWeek;
   startTime: string; // HH:mm format
@@ -81,6 +80,7 @@ export interface ScheduledClass {
   teacherId?: string; // Employee ID
   teacherName?: string; // Denormalized for display
   studentIds: string[]; // Array of Student Firestore IDs enrolled in this class
+  // schedule: ClassScheduleItem[]; // Array of recurring schedule items for this class
   daysOfWeek: DayOfWeek[]; 
   startTime: string; 
   endTime: string;   
@@ -114,7 +114,7 @@ export const instituteSettingsFormSchema = z.object({
   address: z.string().min(5, { message: 'Address must be at least 5 characters.' }),
   contactEmail: z.string().email({ message: 'Invalid email address.' }),
   contactPhone: z.string().min(10, { message: 'Phone number must be at least 10 digits.' }),
-  webhookUrl: z.string().url({ message: "Invalid URL format." }).optional().or(z.literal('')),
+  webhookUrl: z.string().url({ message: "Invalid URL format." }).optional().or(z.literal('')).nullable(),
 });
 export type InstituteSettingsFormData = z.infer<typeof instituteSettingsFormSchema>;
 
@@ -150,3 +150,4 @@ export function checkScheduleConflict(
     
     return timeOverlap; // Conflict if there's a common day AND time overlap
 }
+
