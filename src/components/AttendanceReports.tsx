@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
 import { db } from '@/lib/firebase';
-import type { AttendanceRecord, ScheduledClass, Student, Classroom } from '@/lib/types';
+import type { AttendanceRecord, ScheduledClass, Student, Classroom, DayOfWeek } from '@/lib/types';
 import { collection, query, where, getDocs, Timestamp } from 'firebase/firestore';
 import { ClipboardList, Download, Filter } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -35,8 +35,8 @@ export default function AttendanceReports() {
   
   const [isLoading, setIsLoading] = useState(false);
   const [dateRange, setDateRange] = useState<{ from?: Date; to?: Date }>({});
-  const [selectedStudentId, setSelectedStudentId] = useState<string | undefined>(undefined);
-  const [selectedClassId, setSelectedClassId] = useState<string | undefined>(undefined); // This will be ScheduledClass.id
+  const [selectedStudentId, setSelectedStudentId] = useState<string | undefined>(ALL_STUDENTS_VALUE);
+  const [selectedClassId, setSelectedClassId] = useState<string | undefined>(ALL_CLASSES_VALUE); // This will be ScheduledClass.id
 
   useEffect(() => {
     if (instituteId) {
@@ -75,7 +75,8 @@ export default function AttendanceReports() {
         return { 
           ...data, 
           id: d.id, 
-          classroomDiplayName: classroom ? `${classroom.roomNumber} - ${classroom.section}`: 'N/A' 
+          classroomDiplayName: classroom ? `${classroom.roomNumber} - ${classroom.section}`: 'N/A',
+          schedules: data.schedules || [] // Ensure schedules is always an array
         };
       });
 
@@ -105,10 +106,10 @@ export default function AttendanceReports() {
         const toTimestamp = Timestamp.fromDate(toDateEnd);
         tempRecords = tempRecords.filter(r => r.timestamp <= toTimestamp);
     }
-    if (selectedStudentId) {
+    if (selectedStudentId && selectedStudentId !== ALL_STUDENTS_VALUE) {
         tempRecords = tempRecords.filter(r => r.studentFirebaseId === selectedStudentId);
     }
-    if (selectedClassId) { // selectedClassId is the ScheduledClass.id
+    if (selectedClassId && selectedClassId !== ALL_CLASSES_VALUE) { // selectedClassId is the ScheduledClass.id
         tempRecords = tempRecords.filter(r => r.scheduledClassId === selectedClassId);
     }
     setFilteredRecords(tempRecords.sort((a,b) => b.timestamp.toMillis() - a.timestamp.toMillis()));
@@ -128,31 +129,26 @@ export default function AttendanceReports() {
     const sc = allScheduledClasses.find(s => s.id === scheduledClassId);
     if (!sc) return scheduledClassId;
 
+    // sc.schedules is now guaranteed to be an array by the data fetching logic, but it might be empty.
     const recordDate = recordTimestamp.toDate();
-    const recordDay = format(recordDate, 'EEEE') as any; // E.g., "Monday"
-    const recordTimeMinutes = recordDate.getHours() * 60 + recordDate.getMinutes();
+    const recordDay = format(recordDate, 'EEEE') as DayOfWeek; // E.g., "Monday"
 
-    // Find the specific schedule slot that matches the record's day and approximate time
-    // This is an approximation; a more robust match might be needed if classes are back-to-back
-    const matchedSchedule = sc.schedules.find(slot => {
-        if (slot.dayOfWeek !== recordDay) return false;
-        
-        // Check if recordTime is within a reasonable buffer of slot.startTime
-        // For simplicity, we'll just use the day. In a real app, you might need to store
-        // the specific scheduleItem in the attendance record or have more precise matching.
-        // For now, the subject and classroom will be from the parent ScheduledClass.
-        return true; 
-    });
+    // Attempt to find a schedule item that matches the day of the record.
+    // This is a simplification. A real system might store which specific scheduleItem
+    // the attendance record corresponds to if a class has multiple slots on the same day.
+    const matchedSchedule = sc.schedules.find(slot => slot.dayOfWeek === recordDay);
 
-    let timeDisplay = "General";
+    let timeDisplay = "General"; // Default if no specific slot is matched by day
     if (matchedSchedule) {
       timeDisplay = `${matchedSchedule.startTime}-${matchedSchedule.endTime}`;
-    } else if (sc.schedules.length > 0) {
-      // Fallback if no exact match by day/time (timestamp is key)
-      // This part might need refinement based on how specific the "Class" display needs to be
-      timeDisplay = "Multiple Slots";
+    } else if (sc.schedules && sc.schedules.length > 0) {
+      // If there are schedules, but none match the record's day.
+      timeDisplay = `Scheduled on other days`;
+    } else {
+      // If sc.schedules is empty
+      timeDisplay = `No schedule slots defined`;
     }
-
+    
     return `${sc.subjectName} (${sc.classroomDiplayName || 'N/A'}) - ${timeDisplay}`;
   };
 
@@ -211,28 +207,28 @@ export default function AttendanceReports() {
               <div>
                 <Label htmlFor="studentSelect">Student</Label>
                 <Select 
-                  onValueChange={(value) => setSelectedStudentId(value === ALL_STUDENTS_VALUE ? undefined : value)} 
-                  value={selectedStudentId || ALL_STUDENTS_VALUE}
+                  onValueChange={(value) => setSelectedStudentId(value)} 
+                  value={selectedStudentId}
                 >
                   <SelectTrigger id="studentSelect"><SelectValue placeholder="All Students" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value={ALL_STUDENTS_VALUE}>All Students</SelectItem>
                     {students.map(s => <SelectItem key={s.id} value={s.id!}>{s.name} ({s.studentIdNo})</SelectItem>)}
-                    {students.length === 0 && <SelectItem value="no-students" disabled>No students found</SelectItem>}
+                    {students.length === 0 && <SelectItem value="no-students-placeholder" disabled>No students found</SelectItem>}
                   </SelectContent>
                 </Select>
               </div>
               <div>
                 <Label htmlFor="classSelect">Class Subject</Label>
                 <Select 
-                  onValueChange={(value) => setSelectedClassId(value === ALL_CLASSES_VALUE ? undefined : value)} 
-                  value={selectedClassId || ALL_CLASSES_VALUE}
+                  onValueChange={(value) => setSelectedClassId(value)} 
+                  value={selectedClassId}
                 >
                   <SelectTrigger id="classSelect"><SelectValue placeholder="All Subjects" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value={ALL_CLASSES_VALUE}>All Subjects</SelectItem>
                     {allScheduledClasses.map(sc => <SelectItem key={sc.id} value={sc.id!}>{sc.subjectName} ({sc.subjectCode || 'N/A'})</SelectItem>)}
-                    {allScheduledClasses.length === 0 && <SelectItem value="no-classes" disabled>No classes found</SelectItem>}
+                    {allScheduledClasses.length === 0 && <SelectItem value="no-classes-placeholder" disabled>No classes found</SelectItem>}
                   </SelectContent>
                 </Select>
               </div>
@@ -281,3 +277,4 @@ export default function AttendanceReports() {
     </div>
   );
 }
+
