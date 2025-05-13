@@ -37,6 +37,7 @@ const scheduledClassFormSchema = z.object({
 });
 
 const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] as const;
+const UNASSIGN_TEACHER_VALUE = "--UNASSIGN_TEACHER--"; // Sentinel value for "None" option
 
 export default function ScheduledClassManagement() {
   const { toast } = useToast();
@@ -62,7 +63,7 @@ export default function ScheduledClassManagement() {
       dayOfWeek: undefined,
       startTime: '',
       endTime: '',
-      teacherId: '',
+      teacherId: undefined, // Use undefined for optional fields not set initially
       studentIds: [],
     },
   });
@@ -85,31 +86,22 @@ export default function ScheduledClassManagement() {
       const classroomQuery = query(collection(db, 'classrooms'), where('instituteId', '==', instituteId));
       const employeeQuery = query(collection(db, 'employees'), where('instituteId', '==', instituteId));
       const studentQuery = query(collection(db, 'students'), where('instituteId', '==', instituteId));
-      const scheduledClassQuery = query(collection(db, 'scheduledClasses'), where('instituteId', '==', instituteId));
-
-      const [classroomSnap, employeeSnap, studentSnap, scheduledClassSnap] = await Promise.all([
+      
+      const [classroomSnap, employeeSnap, studentSnap] = await Promise.all([
         getDocs(classroomQuery),
         getDocs(employeeQuery),
         getDocs(studentQuery),
-        getDocs(scheduledClassQuery)
       ]);
 
-      setClassrooms(classroomSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Classroom)));
-      setEmployees(employeeSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Employee)));
+      const fetchedClassrooms = classroomSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Classroom));
+      const fetchedEmployees = employeeSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Employee));
+      
+      setClassrooms(fetchedClassrooms);
+      setEmployees(fetchedEmployees);
       setStudents(studentSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Student)));
       
-      const fetchedScheduledClasses = scheduledClassSnap.docs.map(d => {
-        const data = d.data() as ScheduledClass;
-        const classroom = classrooms.find(c => c.id === data.classroomId);
-        const teacher = employees.find(e => e.id === data.teacherId);
-        return { 
-            id: d.id, 
-            ...data,
-            classroomDiplayName: classroom ? `${classroom.roomNumber} - ${classroom.section}`: 'N/A',
-            teacherName: teacher ? teacher.name : 'N/A'
-        };
-      });
-      setScheduledClasses(fetchedScheduledClasses);
+      // Fetch scheduled classes after other data to use for display names
+      await fetchScheduledClassesWithDetails(fetchedClassrooms, fetchedEmployees);
 
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -119,23 +111,23 @@ export default function ScheduledClassManagement() {
     }
   }
   
-  // Re-fetch scheduled classes after add/edit/delete and update their display names
-  async function fetchScheduledClassesWithDetails() {
+  async function fetchScheduledClassesWithDetails(
+    currentClassrooms?: Classroom[], // Allow passing current lists to avoid re-fetching if not needed
+    currentEmployees?: Employee[]
+  ) {
     if (!instituteId) return;
-    setIsLoading(true); // Can set a specific loading for just the table if preferred
+    setIsLoading(true); 
     try {
         const scheduledClassQuery = query(collection(db, 'scheduledClasses'), where('instituteId', '==', instituteId));
         const scheduledClassSnap = await getDocs(scheduledClassQuery);
         
-        // Ensure classrooms and employees lists are up-to-date if they could change elsewhere, or rely on existing state
-        // For simplicity, using existing state here. Refetch them if necessary.
-        const currentClassrooms = classrooms; 
-        const currentEmployees = employees;
+        const classroomsToUse = currentClassrooms || classrooms;
+        const employeesToUse = currentEmployees || employees;
 
         const fetchedScheduledClasses = scheduledClassSnap.docs.map(d => {
             const data = d.data() as ScheduledClass;
-            const classroom = currentClassrooms.find(c => c.id === data.classroomId);
-            const teacher = currentEmployees.find(e => e.id === data.teacherId);
+            const classroom = classroomsToUse.find(c => c.id === data.classroomId);
+            const teacher = employeesToUse.find(e => e.id === data.teacherId);
             return { 
                 id: d.id, 
                 ...data,
@@ -161,10 +153,10 @@ export default function ScheduledClassManagement() {
     setIsSubmitting(true);
     try {
       const selectedClassroom = classrooms.find(c => c.id === values.classroomId);
-      const selectedTeacher = employees.find(e => e.id === values.teacherId);
+      const selectedTeacher = employees.find(e => e.id === values.teacherId); // values.teacherId will be undefined if "None" was selected
 
       const scheduledClassData: ScheduledClassFormData & { createdAt: any } = {
-        ...values,
+        ...values, // teacherId will be undefined or a string ID
         instituteId,
         classroomDiplayName: selectedClassroom ? `${selectedClassroom.roomNumber} - ${selectedClassroom.section}` : undefined,
         teacherName: selectedTeacher ? selectedTeacher.name : undefined,
@@ -173,7 +165,7 @@ export default function ScheduledClassManagement() {
       };
       await addDoc(collection(db, 'scheduledClasses'), scheduledClassData);
       toast({ title: 'Scheduled Class Added', description: `${values.subjectName} has been scheduled.` });
-      form.reset();
+      form.reset(); // This will reset teacherId to undefined (its default value)
       setShowAddForm(false);
       await fetchScheduledClassesWithDetails();
     } catch (error) {
@@ -211,7 +203,7 @@ export default function ScheduledClassManagement() {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Classroom (Physical Room)</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <Select onValueChange={field.onChange} value={field.value}>
                           <FormControl><SelectTrigger><SelectValue placeholder="Select a classroom" /></SelectTrigger></FormControl>
                           <SelectContent>
                             {classrooms.map(c => <SelectItem key={c.id} value={c.id!}>{c.roomNumber} - {c.section}</SelectItem>)}
@@ -227,10 +219,13 @@ export default function ScheduledClassManagement() {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Teacher (Optional)</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value} value={field.value || ""}>
+                        <Select 
+                          onValueChange={(value) => field.onChange(value === UNASSIGN_TEACHER_VALUE ? undefined : value)} 
+                          value={field.value} // Can be undefined, a teacher ID
+                        >
                           <FormControl><SelectTrigger><SelectValue placeholder="Select a teacher" /></SelectTrigger></FormControl>
                           <SelectContent>
-                            <SelectItem value="">None</SelectItem>
+                            <SelectItem value={UNASSIGN_TEACHER_VALUE}>None (Clear Selection)</SelectItem>
                             {employees.map(e => <SelectItem key={e.id} value={e.id!}>{e.name}</SelectItem>)}
                           </SelectContent>
                         </Select>
@@ -240,7 +235,19 @@ export default function ScheduledClassManagement() {
                   />
                 </div>
 
-                <FormField control={form.control} name="subjectName" render={({ field }) => (<FormItem><FormLabel>Subject Name</FormLabel><FormControl><Input placeholder="e.g., Mathematics 101" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                <FormField 
+                  control={form.control} 
+                  name="subjectName" 
+                  render={({ field }) => { 
+                    return (
+                      <FormItem>
+                        <FormLabel>Subject Name</FormLabel>
+                        <FormControl><Input placeholder="e.g., Mathematics 101" {...field} /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    );
+                  }} 
+                />
                 <FormField control={form.control} name="subjectCode" render={({ field }) => (<FormItem><FormLabel>Subject Code (Optional)</FormLabel><FormControl><Input placeholder="e.g., MATH101" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)} />
 
                 <div className="grid md:grid-cols-3 gap-6">
@@ -250,7 +257,7 @@ export default function ScheduledClassManagement() {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Day of Week</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <Select onValueChange={field.onChange} value={field.value}>
                           <FormControl><SelectTrigger><SelectValue placeholder="Select day" /></SelectTrigger></FormControl>
                           <SelectContent>
                             {daysOfWeek.map(day => <SelectItem key={day} value={day}>{day}</SelectItem>)}
@@ -331,7 +338,7 @@ export default function ScheduledClassManagement() {
                 <TableRow>
                   <TableHead>Subject</TableHead>
                   <TableHead>Classroom</TableHead>
-                  <TableHead>Day & Time</TableHead>
+                  <TableHead>Day &amp; Time</TableHead>
                   <TableHead>Teacher</TableHead>
                   <TableHead>Students</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
