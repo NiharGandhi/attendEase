@@ -15,7 +15,7 @@ import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import type { Institute, InstituteSettingsFormData } from '@/lib/types';
 import { instituteSettingsFormSchema } from '@/lib/types';
-import { UploadCloud, Building, LinkIcon as LinkExternalIcon, Save, Settings2, Webhook, DatabaseZap, TerminalSquare } from 'lucide-react';
+import { UploadCloud, Building, LinkIcon as LinkExternalIcon, Save, Settings2, Webhook, DatabaseZap, TerminalSquare, BookOpenCheck } from 'lucide-react';
 import Image from 'next/image';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 
@@ -129,6 +129,14 @@ export default function InstituteSettings() {
     }
   };
   
+  const handleConfigureLms = () => {
+    toast({
+      title: "LMS Integration (Coming Soon)",
+      description: "This feature is under development. We plan to support integrations with platforms like Brightspace, Moodle, Canvas, Brightpulse, and more to streamline your workflows. Stay tuned!",
+      duration: 5000,
+    });
+  };
+
   if (isLoading) return <div className="flex justify-center items-center h-64"><p className="text-lg">Loading institute settings...</p></div>;
   if (!instituteId || !institute) return <p className="text-destructive text-center p-4">Institute data could not be loaded. Please ensure you are logged in or try again later.</p>;
 
@@ -177,7 +185,7 @@ export default function InstituteSettings() {
           <CardTitle className="text-2xl flex items-center gap-2"><Webhook className="h-6 w-6 text-accent"/>External Integrations & Data Export</CardTitle>
           <CardDescription>Configure webhooks and learn about API and system integrations.</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6">
+        <CardContent className="space-y-8"> {/* Increased spacing for new sections */}
            <Form {...form}> {/* Use the same form instance */}
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
                 <FormField
@@ -201,6 +209,18 @@ export default function InstituteSettings() {
             </form>
           </Form>
 
+            <div className="pt-4 border-t mt-8">
+                <h3 className="text-xl font-semibold mb-3 flex items-center gap-2"><BookOpenCheck className="h-5 w-5 text-primary"/>LMS Integration</h3>
+                <CardDescription className="mb-4">
+                    We are actively developing integrations with popular Learning Management Systems (LMS) like Brightspace, Moodle, Canvas, Brightpulse, and others. 
+                    This will enable seamless synchronization of student rosters, class schedules, and attendance data, reducing manual data entry and ensuring consistency across platforms.
+                </CardDescription>
+                <Button onClick={handleConfigureLms} variant="outline">
+                    Configure LMS Connection (Coming Soon)
+                </Button>
+            </div>
+
+
              <Alert variant="default" className="bg-purple-50 border-purple-200 text-purple-700">
                 <TerminalSquare className="h-5 w-5 !text-purple-700" />
                 <AlertTitle className="font-semibold !text-purple-700">AttendEase API Endpoints</AlertTitle>
@@ -220,16 +240,6 @@ export default function InstituteSettings() {
                     <p className="mt-2 text-xs">
                         <strong>Note:</strong> These are read-only endpoints. Write operations and more comprehensive API access are planned for future development. Authentication/authorization mechanisms will be required for secure access.
                     </p>
-                </AlertDescription>
-            </Alert>
-
-            <Alert variant="default" className="bg-accent/10 border-accent/30 mt-8">
-                <LinkExternalIcon className="h-5 w-5 text-accent" />
-                <AlertTitle className="text-accent font-semibold">LMS Integration (Planned)</AlertTitle>
-                <AlertDescription className="text-accent/80">
-                    We are actively developing integrations with popular Learning Management Systems (LMS) like Brightspace, Moodle, Canvas, and others. 
-                    This will enable seamless synchronization of student rosters, class schedules, and attendance data, reducing manual data entry and ensuring consistency across platforms.
-                    Stay tuned for updates on specific LMS connectors and availability!
                 </AlertDescription>
             </Alert>
             
