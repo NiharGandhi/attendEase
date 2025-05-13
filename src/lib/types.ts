@@ -9,6 +9,7 @@ export interface Institute {
   contactEmail: string;
   contactPhone: string;
   logoUrl?: string; // URL for the institute's logo
+  webhookUrl?: string; // URL for webhook data export
   createdAt?: Timestamp;
   adminUid?: string;
   facesetToken?: string; // Face++ FaceSet Token
@@ -22,6 +23,7 @@ export interface Employee {
   role: string; // e.g., 'admin', 'teacher'
   firebaseUid?: string; // Link to Firebase Auth user
   createdAt?: Timestamp;
+  updatedAt?: Timestamp;
 }
 
 export interface Classroom {
@@ -31,6 +33,7 @@ export interface Classroom {
   section: string;
   capacity?: number;
   createdAt?: Timestamp;
+  updatedAt?: Timestamp;
 }
 
 export interface Student {
@@ -44,6 +47,7 @@ export interface Student {
   imageUrl?: string; // Link to image in Firebase Storage
   faceToken?: string; // Face++ Face Token for this student's primary image
   createdAt?: Timestamp;
+  updatedAt?: Timestamp;
 }
 
 export enum DayOfWeek {
@@ -58,17 +62,14 @@ export enum DayOfWeek {
 export const daysOfWeekArray = Object.values(DayOfWeek);
 
 
-export interface TimeSlot { // This might become less used if classes have single start/end times
+// This interface defines a single scheduled time slot for a class.
+// A class can have multiple such items if it meets on different days/times.
+export interface ClassScheduleItem {
+  dayOfWeek: DayOfWeek;
   startTime: string; // HH:mm format
   endTime: string;   // HH:mm format
 }
 
-// This interface is being replaced by direct properties on ScheduledClass for the new model
-// export interface ClassScheduleItem {
-//   dayOfWeek: DayOfWeek;
-//   startTime: string; // HH:mm format
-//   endTime: string;   // HH:mm format
-// }
 
 export interface ScheduledClass {
   id?: string; // Firestore document ID
@@ -80,11 +81,11 @@ export interface ScheduledClass {
   teacherId?: string; // Employee ID
   teacherName?: string; // Denormalized for display
   studentIds: string[]; // Array of Student Firestore IDs enrolled in this class
-  // Old structure: schedules: ClassScheduleItem[];
-  daysOfWeek: DayOfWeek[]; // New: Array of days this class occurs
-  startTime: string; // New: Single start time for all occurrences
-  endTime: string;   // New: Single end time for all occurrences
+  daysOfWeek: DayOfWeek[]; 
+  startTime: string; 
+  endTime: string;   
   createdAt?: Timestamp;
+  updatedAt?: Timestamp;
 }
 
 export interface AttendanceRecord {
@@ -99,13 +100,13 @@ export interface AttendanceRecord {
 }
 
 // Used for form validation
-export type InstituteFormData = Omit<Institute, 'id' | 'createdAt' | 'adminUid' | 'facesetToken' | 'logoUrl'> & { adminPassword?: string };
-export type EmployeeFormData = Omit<Employee, 'id' | 'instituteId' | 'createdAt' | 'firebaseUid'>;
-export type ClassroomFormData = Omit<Classroom, 'id' | 'instituteId' | 'createdAt'>;
-export type StudentFormData = Omit<Student, 'id' | 'instituteId' | 'imageUrl' | 'faceToken' | 'createdAt'>;
+export type InstituteFormData = Omit<Institute, 'id' | 'createdAt' | 'adminUid' | 'facesetToken' | 'logoUrl' | 'webhookUrl'> & { adminPassword?: string };
+export type EmployeeFormData = Omit<Employee, 'id' | 'instituteId' | 'createdAt' | 'firebaseUid' | 'updatedAt'>;
+export type ClassroomFormData = Omit<Classroom, 'id' | 'instituteId' | 'createdAt' | 'updatedAt'>;
+export type StudentFormData = Omit<Student, 'id' | 'instituteId' | 'imageUrl' | 'faceToken' | 'createdAt' | 'updatedAt'>;
 
 
-export type ScheduledClassFormData = Omit<ScheduledClass, 'id' | 'createdAt' | 'classroomDiplayName' | 'teacherName'>;
+export type ScheduledClassFormData = Omit<ScheduledClass, 'id' | 'createdAt' | 'updatedAt' | 'classroomDiplayName' | 'teacherName'>;
 
 
 export const instituteSettingsFormSchema = z.object({
@@ -113,6 +114,7 @@ export const instituteSettingsFormSchema = z.object({
   address: z.string().min(5, { message: 'Address must be at least 5 characters.' }),
   contactEmail: z.string().email({ message: 'Invalid email address.' }),
   contactPhone: z.string().min(10, { message: 'Phone number must be at least 10 digits.' }),
+  webhookUrl: z.string().url({ message: "Invalid URL format." }).optional().or(z.literal('')),
 });
 export type InstituteSettingsFormData = z.infer<typeof instituteSettingsFormSchema>;
 

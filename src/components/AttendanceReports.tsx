@@ -10,14 +10,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
 import { db } from '@/lib/firebase';
-import type { AttendanceRecord, ScheduledClass, Student, Classroom, DayOfWeek } from '@/lib/types';
-import { collection, query, where, getDocs, Timestamp } from 'firebase/firestore';
-import { ClipboardList, Download, Filter } from 'lucide-react';
+import type { AttendanceRecord, ScheduledClass, Student, Classroom, DayOfWeek, Institute } from '@/lib/types';
+import { collection, query, where, getDocs, Timestamp, doc, getDoc } from 'firebase/firestore';
+import { ClipboardList, Download, Filter, Send } from 'lucide-react'; // Added Send icon
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
 import { Calendar as CalendarIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { sendAttendanceDataToWebhook } from '@/actions/webhookActions';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+
 
 const ALL_STUDENTS_VALUE = "__ALL_STUDENTS__";
 const ALL_CLASSES_VALUE = "__ALL_CLASSES__";
@@ -31,8 +34,10 @@ export default function AttendanceReports() {
   const [filteredRecords, setFilteredRecords] = useState<AttendanceRecord[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [allScheduledClasses, setAllScheduledClasses] = useState<ScheduledClass[]>([]); 
+  const [instituteWebhookUrl, setInstituteWebhookUrl] = useState<string | null>(null);
   
   const [isLoading, setIsLoading] = useState(false);
+  const [isSendingWebhook, setIsSendingWebhook] = useState(false);
   const [dateRange, setDateRange] = useState<{ from?: Date; to?: Date }>({});
   const [selectedStudentId, setSelectedStudentId] = useState<string | undefined>(ALL_STUDENTS_VALUE);
   const [selectedClassId, setSelectedClassId] = useState<string | undefined>(ALL_CLASSES_VALUE);
@@ -40,6 +45,7 @@ export default function AttendanceReports() {
   useEffect(() => {
     if (instituteId) {
       fetchInitialData();
+      fetchInstituteWebhookUrl();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [instituteId]);
@@ -48,6 +54,22 @@ export default function AttendanceReports() {
     applyFilters();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [attendanceRecords, dateRange, selectedStudentId, selectedClassId]);
+  
+  async function fetchInstituteWebhookUrl() {
+    if (!instituteId) return;
+    try {
+      const instituteRef = doc(db, 'institutes', instituteId);
+      const instituteSnap = await getDoc(instituteRef);
+      if (instituteSnap.exists()) {
+        const instituteData = instituteSnap.data() as Institute;
+        setInstituteWebhookUrl(instituteData.webhookUrl || null);
+      }
+    } catch (error) {
+      console.error("Error fetching institute webhook URL:", error);
+      toast({ variant: 'destructive', title: 'Error', description: 'Could not fetch webhook configuration.' });
+    }
+  }
+
 
   async function fetchInitialData() {
     if (!instituteId) return;
@@ -75,7 +97,7 @@ export default function AttendanceReports() {
           ...data, 
           id: d.id, 
           classroomDiplayName: classroom ? `${classroom.roomNumber} - ${classroom.section}`: data.classroomDiplayName || 'N/A',
-          daysOfWeek: data.daysOfWeek || [], // Ensure daysOfWeek is always an array
+          daysOfWeek: data.daysOfWeek || [], 
         };
       });
 
@@ -122,6 +144,34 @@ export default function AttendanceReports() {
     }
     toast({ title: "Export Data", description: "CSV export functionality is coming soon!" });
   };
+
+  const handleExportToWebhook = async () => {
+    if (!instituteId) {
+      toast({ variant: 'destructive', title: 'Error', description: 'Institute ID is missing.' });
+      return;
+    }
+    if (!instituteWebhookUrl) {
+      toast({ variant: 'destructive', title: 'Webhook Not Configured', description: 'Please configure a webhook URL in institute settings.' });
+      return;
+    }
+    if (filteredRecords.length === 0) {
+      toast({ variant: 'destructive', title: 'No Data', description: 'No data to send based on current filters.' });
+      return;
+    }
+    setIsSendingWebhook(true);
+    try {
+      const result = await sendAttendanceDataToWebhook(instituteWebhookUrl, filteredRecords, instituteId);
+      if (result.success) {
+        toast({ title: 'Webhook Success', description: result.message });
+      } else {
+        toast({ variant: 'destructive', title: 'Webhook Error', description: result.message });
+      }
+    } catch (error: any) {
+      toast({ variant: 'destructive', title: 'Webhook Failed', description: error.message || 'An unexpected error occurred.' });
+    } finally {
+      setIsSendingWebhook(false);
+    }
+  };
   
   const getStudentName = (studentId: string) => students.find(s => s.id === studentId)?.name || studentId;
   
@@ -130,10 +180,9 @@ export default function AttendanceReports() {
     if (!sc) return scheduledClassId;
 
     const recordDate = recordTimestamp.toDate();
-    const recordDay = format(recordDate, 'EEEE') as DayOfWeek;
+    const recordDay = format(recordDate, 'EEEE') as DayOfWeek; // Cast to DayOfWeek
 
     let timeDisplay = `${sc.startTime}-${sc.endTime}`;
-    // Check if the class actually occurs on the day of the record
     if (!sc.daysOfWeek || !sc.daysOfWeek.includes(recordDay)) {
       timeDisplay = `Scheduled on other days (${sc.startTime}-${sc.endTime})`;
     } else if (!sc.startTime || !sc.endTime) {
@@ -229,7 +278,28 @@ export default function AttendanceReports() {
             </Button>
           </Card>
 
-          <div className="flex justify-end">
+          {!instituteWebhookUrl && (
+            <Alert variant="default" className="bg-yellow-50 border-yellow-200 text-yellow-700">
+              <Send className="h-4 w-4 !text-yellow-700" /> {/* Ensure icon color matches text */}
+              <AlertTitle>Webhook Not Configured</AlertTitle>
+              <AlertDescription>
+                To export data to a webhook, please configure the Webhook URL in{" "}
+                <a href={`/institute/settings?instituteId=${instituteId}`} className="font-semibold underline hover:text-yellow-800">
+                  Institute Settings
+                </a>.
+              </AlertDescription>
+            </Alert>
+          )}
+
+          <div className="flex justify-end gap-2">
+            <Button 
+                onClick={handleExportToWebhook} 
+                variant="outline" 
+                disabled={isLoading || isSendingWebhook || filteredRecords.length === 0 || !instituteWebhookUrl}
+                title={!instituteWebhookUrl ? "Configure webhook URL in settings first" : "Send filtered data to configured webhook"}
+            >
+              <Send className="mr-2 h-4 w-4"/> {isSendingWebhook ? 'Sending...' : 'Export to Webhook'}
+            </Button>
             <Button onClick={handleExportData} variant="outline" disabled={isLoading || filteredRecords.length === 0}>
               <Download className="mr-2 h-4 w-4"/> Export Data (CSV)
             </Button>

@@ -7,15 +7,15 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Form, FormControl, FormDescription as FormDesc, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { db, storage } from '@/lib/firebase';
-import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, updateDoc } from 'firebase/firestore'; // Removed serverTimestamp as not used
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import type { Institute, InstituteSettingsFormData } from '@/lib/types';
 import { instituteSettingsFormSchema } from '@/lib/types';
-import { UploadCloud, Building, Link as LinkIcon, Save, Briefcase, Settings2 } from 'lucide-react';
+import { UploadCloud, Building, LinkIcon as LinkExternalIcon, Save, Settings2, Webhook } from 'lucide-react'; // Renamed LinkIcon
 import Image from 'next/image';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 
@@ -39,6 +39,7 @@ export default function InstituteSettings() {
       address: '',
       contactEmail: '',
       contactPhone: '',
+      webhookUrl: '',
     },
   });
 
@@ -67,9 +68,11 @@ export default function InstituteSettings() {
           address: data.address || '',
           contactEmail: data.contactEmail,
           contactPhone: data.contactPhone || '',
+          webhookUrl: data.webhookUrl || '',
         });
       } else {
         toast({ variant: 'destructive', title: 'Error', description: 'Institute not found.' });
+        router.push('/');
       }
     } catch (error) {
       toast({ variant: 'destructive', title: 'Error', description: 'Failed to fetch institute details.' });
@@ -83,10 +86,14 @@ export default function InstituteSettings() {
     setIsSubmitting(true);
     try {
       const instituteRef = doc(db, 'institutes', instituteId);
-      await updateDoc(instituteRef, {
-        ...values,
-        // updatedAt: serverTimestamp(), // Consider adding this if tracking updates is important
-      });
+      const dataToUpdate: Partial<Institute> = {
+        name: values.name,
+        address: values.address,
+        contactEmail: values.contactEmail,
+        contactPhone: values.contactPhone,
+        webhookUrl: values.webhookUrl || '', // Store empty string if undefined
+      };
+      await updateDoc(instituteRef, dataToUpdate);
       toast({ title: 'Settings Updated', description: 'Institute details saved successfully.' });
       fetchInstituteDetails(); 
     } catch (error) {
@@ -139,40 +146,62 @@ export default function InstituteSettings() {
               <FormField control={form.control} name="address" render={({ field }) => (<FormItem><FormLabel>Address</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)} />
               <FormField control={form.control} name="contactEmail" render={({ field }) => (<FormItem><FormLabel>Contact Email</FormLabel><FormControl><Input type="email" {...field} /></FormControl><FormMessage /></FormItem>)} />
               <FormField control={form.control} name="contactPhone" render={({ field }) => (<FormItem><FormLabel>Contact Phone</FormLabel><FormControl><Input type="tel" {...field} /></FormControl><FormMessage /></FormItem>)} />
-              <Button type="submit" disabled={isSubmitting} className="bg-primary hover:bg-primary/90 text-primary-foreground w-full sm:w-auto">
-                <Save className="mr-2 h-4 w-4" /> {isSubmitting ? 'Saving...' : 'Save Changes'}
+              
+              <div className="pt-6">
+                <h3 className="text-lg font-semibold mb-2">Institute Logo</h3>
+                <CardDescription className="mb-4">Upload or update your institute&apos;s logo (PNG, JPG, SVG recommended).</CardDescription>
+                {institute.logoUrl && (
+                  <div className="mb-4 p-4 border rounded-md bg-muted/30 inline-block">
+                    <p className="font-medium mb-2 text-sm">Current Logo:</p>
+                    <Image src={institute.logoUrl} alt={`${institute.name} Logo`} width={120} height={120} className="rounded-md border object-contain bg-background shadow-sm" data-ai-hint="institute logo"/>
+                  </div>
+                )}
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                  <Input type="file" accept="image/png, image/jpeg, image/svg+xml" ref={logoInputRef} onChange={(e) => e.target.files && setLogoFile(e.target.files[0])} className="max-w-xs file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90"/>
+                  <Button onClick={handleLogoUpload} disabled={!logoFile || isUploadingLogo} className="w-full sm:w-auto">
+                    <UploadCloud className="mr-2 h-4 w-4"/> {isUploadingLogo ? 'Uploading...' : 'Upload Logo'}
+                  </Button>
+                </div>
+                {logoFile && <p className="text-sm text-muted-foreground mt-2">Selected: {logoFile.name}</p>}
+              </div>
+               <Button type="submit" disabled={isSubmitting} className="bg-primary hover:bg-primary/90 text-primary-foreground w-full sm:w-auto mt-6">
+                <Save className="mr-2 h-4 w-4" /> {isSubmitting ? 'Saving...' : 'Save General Changes'}
               </Button>
             </form>
           </Form>
-          
-          <div className="pt-6">
-            <h3 className="text-lg font-semibold mb-2">Institute Logo</h3>
-            <CardDescription className="mb-4">Upload or update your institute&apos;s logo (PNG, JPG, SVG recommended).</CardDescription>
-            {institute.logoUrl && (
-              <div className="mb-4 p-4 border rounded-md bg-muted/30 inline-block">
-                <p className="font-medium mb-2 text-sm">Current Logo:</p>
-                <Image src={institute.logoUrl} alt={`${institute.name} Logo`} width={120} height={120} className="rounded-md border object-contain bg-background shadow-sm" data-ai-hint="institute logo"/>
-              </div>
-            )}
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-              <Input type="file" accept="image/png, image/jpeg, image/svg+xml" ref={logoInputRef} onChange={(e) => e.target.files && setLogoFile(e.target.files[0])} className="max-w-xs file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90"/>
-              <Button onClick={handleLogoUpload} disabled={!logoFile || isUploadingLogo} className="w-full sm:w-auto">
-                <UploadCloud className="mr-2 h-4 w-4"/> {isUploadingLogo ? 'Uploading...' : 'Upload Logo'}
-              </Button>
-            </div>
-            {logoFile && <p className="text-sm text-muted-foreground mt-2">Selected: {logoFile.name}</p>}
-          </div>
         </CardContent>
       </Card>
 
       <Card className="shadow-xl border-t-4 border-accent">
         <CardHeader>
-          <CardTitle className="text-2xl flex items-center gap-2"><LinkIcon className="h-6 w-6 text-accent"/>LMS & External Integrations</CardTitle>
-          <CardDescription>Connect AttendEase with your existing systems for a streamlined workflow.</CardDescription>
+          <CardTitle className="text-2xl flex items-center gap-2"><Webhook className="h-6 w-6 text-accent"/>Webhook & Integrations</CardTitle>
+          <CardDescription>Configure webhooks for data export and manage external system integrations.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-            <Alert variant="default" className="bg-accent/10 border-accent/30">
-                <LinkIcon className="h-5 w-5 text-accent" />
+           <Form {...form}> {/* Use the same form instance for simplicity, or create a separate one if complex */}
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                <FormField
+                    control={form.control}
+                    name="webhookUrl"
+                    render={({ field }) => (
+                    <FormItem>
+                        <FormLabel>Webhook URL for Attendance Data</FormLabel>
+                        <FormControl><Input type="url" placeholder="https://your-service.com/webhook-receiver" {...field} value={field.value ?? ''} /></FormControl>
+                        <FormDesc>
+                            If configured, AttendEase will POST attendance data to this URL when manually triggered from the reports page.
+                        </FormDesc>
+                        <FormMessage />
+                    </FormItem>
+                    )}
+                />
+                <Button type="submit" disabled={isSubmitting} className="bg-accent hover:bg-accent/90 text-accent-foreground w-full sm:w-auto">
+                    <Save className="mr-2 h-4 w-4" /> {isSubmitting ? 'Saving Webhook...' : 'Save Webhook Configuration'}
+                </Button>
+            </form>
+          </Form>
+
+            <Alert variant="default" className="bg-accent/10 border-accent/30 mt-8">
+                <LinkExternalIcon className="h-5 w-5 text-accent" />
                 <AlertTitle className="text-accent font-semibold">LMS Integration (Coming Soon)</AlertTitle>
                 <AlertDescription className="text-accent/80">
                     We are actively developing integrations with popular Learning Management Systems like Brightspace, Moodle, Canvas, and others. 
@@ -185,7 +214,7 @@ export default function InstituteSettings() {
                 <Settings2 className="h-5 w-5 text-secondary-foreground" />
                 <AlertTitle className="text-secondary-foreground font-semibold">API & Webhooks for Custom Integrations (Future Development)</AlertTitle>
                 <AlertDescription className="text-muted-foreground">
-                    AttendEase aims to provide a flexible integration pathway for your institution's unique ecosystem. We are planning to develop:
+                    AttendEase aims to provide a flexible integration pathway for your institution&apos;s unique ecosystem. We are planning to develop:
                     <ul className="list-disc list-inside mt-2 space-y-1">
                         <li><strong>RESTful API:</strong> A comprehensive API will allow your developers to programmatically access and manage data within AttendEase, including student information, class schedules, and attendance records. This can be used to build custom dashboards, automate administrative tasks, or synchronize with proprietary internal systems.</li>
                         <li><strong>Webhooks:</strong> Configure webhooks to receive real-time notifications about events in AttendEase (e.g., new student registration, attendance session completion). This enables your other applications to react instantly to changes, facilitating automated workflows and data synchronization.</li>
@@ -199,4 +228,3 @@ export default function InstituteSettings() {
     </div>
   );
 }
-
