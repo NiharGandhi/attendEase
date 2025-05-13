@@ -12,7 +12,7 @@ import { useToast } from '@/hooks/use-toast';
 import { db } from '@/lib/firebase';
 import type { AttendanceRecord, ScheduledClass, Student, Classroom, DayOfWeek, Institute } from '@/lib/types';
 import { collection, query, where, getDocs, Timestamp, doc, getDoc } from 'firebase/firestore';
-import { ClipboardList, Download, Filter, Send } from 'lucide-react'; // Added Send icon
+import { ClipboardList, Download, Filter, Send } from 'lucide-react'; 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
@@ -142,7 +142,42 @@ export default function AttendanceReports() {
         toast({variant: 'destructive', title: 'No Data', description: 'No data to export based on current filters.'});
         return;
     }
-    toast({ title: "Export Data", description: "CSV export functionality is coming soon!" });
+    // Convert filteredRecords to CSV string
+    const headers = ["Date", "Time", "Student Name", "Student ID No.", "Class Subject", "Class Code", "Status", "Method", "Recognized At"];
+    const csvRows = [headers.join(",")];
+
+    filteredRecords.forEach(record => {
+        const student = students.find(s => s.id === record.studentFirebaseId);
+        const scheduledClass = allScheduledClasses.find(sc => sc.id === record.scheduledClassId);
+        const row = [
+            format(record.timestamp.toDate(), "yyyy-MM-dd"),
+            format(record.timestamp.toDate(), "HH:mm:ss"),
+            student?.name || record.studentFirebaseId,
+            student?.studentIdNo || "N/A",
+            scheduledClass?.subjectName || record.scheduledClassId,
+            scheduledClass?.subjectCode || "N/A",
+            record.status,
+            record.method || "N/A",
+            record.recognizedAt ? format(record.recognizedAt.toDate(), "yyyy-MM-dd HH:mm:ss") : "N/A"
+        ];
+        csvRows.push(row.map(val => `"${String(val).replace(/"/g, '""')}"`).join(","));
+    });
+
+    const csvString = csvRows.join("\n");
+    const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    if (link.download !== undefined) {
+        const url = URL.createObjectURL(blob);
+        link.setAttribute("href", url);
+        link.setAttribute("download", `attendance_report_${format(new Date(), "yyyyMMdd_HHmmss")}.csv`);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        toast({ title: "Export Successful", description: "Attendance data exported to CSV." });
+    } else {
+        toast({ variant: 'destructive', title: "Export Failed", description: "Your browser does not support direct CSV download." });
+    }
   };
 
   const handleExportToWebhook = async () => {
@@ -180,7 +215,7 @@ export default function AttendanceReports() {
     if (!sc) return scheduledClassId;
 
     const recordDate = recordTimestamp.toDate();
-    const recordDay = format(recordDate, 'EEEE') as DayOfWeek; // Cast to DayOfWeek
+    const recordDay = format(recordDate, 'EEEE') as DayOfWeek; 
 
     let timeDisplay = `${sc.startTime}-${sc.endTime}`;
     if (!sc.daysOfWeek || !sc.daysOfWeek.includes(recordDay)) {
@@ -202,7 +237,7 @@ export default function AttendanceReports() {
       <Card className="shadow-xl">
         <CardHeader>
           <CardTitle className="text-2xl flex items-center"><ClipboardList className="mr-2 h-6 w-6 text-primary"/>Attendance Reports</CardTitle>
-          <CardDescription>View and export attendance records.</CardDescription>
+          <CardDescription>View and export attendance records. Configure webhooks in settings for automated data transfer.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <Card className="p-4 bg-muted/50">
@@ -283,10 +318,10 @@ export default function AttendanceReports() {
               <Send className="h-4 w-4 !text-yellow-700" /> {/* Ensure icon color matches text */}
               <AlertTitle>Webhook Not Configured</AlertTitle>
               <AlertDescription>
-                To export data to a webhook, please configure the Webhook URL in{" "}
+                To automatically export data via webhook, please configure the Webhook URL in{" "}
                 <a href={`/institute/settings?instituteId=${instituteId}`} className="font-semibold underline hover:text-yellow-800">
                   Institute Settings
-                </a>.
+                </a>. Manual CSV export is still available.
               </AlertDescription>
             </Alert>
           )}
@@ -338,3 +373,4 @@ export default function AttendanceReports() {
     </div>
   );
 }
+

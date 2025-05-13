@@ -15,9 +15,10 @@ import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import type { Institute, InstituteSettingsFormData } from '@/lib/types';
 import { instituteSettingsFormSchema } from '@/lib/types';
-import { UploadCloud, Building, Save, Settings2, Webhook, DatabaseZap, TerminalSquare, BookOpenCheck, Link as LinkIcon } from 'lucide-react';
+import { UploadCloud, Building, Save, Settings2, Webhook, DatabaseZap, TerminalSquare, BookOpenCheck, Link as LinkIcon, KeyRound, FileText, Shuffle } from 'lucide-react';
 import Image from 'next/image';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
+import { Separator } from '@/components/ui/separator';
 
 export default function InstituteSettings() {
   const { toast } = useToast();
@@ -183,7 +184,7 @@ export default function InstituteSettings() {
       <Card className="shadow-xl border-t-4 border-accent">
         <CardHeader>
           <CardTitle className="text-2xl flex items-center gap-2"><Settings2 className="h-6 w-6 text-accent"/>Integrations & Connectivity</CardTitle>
-          <CardDescription>Configure webhooks, API access, and Learning Management System (LMS) integrations.</CardDescription>
+          <CardDescription>Configure webhooks, API access, and Learning Management System (LMS) / Student Information System (SIS) integrations.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-8">
             {/* Webhook Configuration */}
@@ -200,7 +201,7 @@ export default function InstituteSettings() {
                                 <FormControl><Input type="url" placeholder="https://your-service.com/webhook-receiver" {...field} value={field.value ?? ''} /></FormControl>
                                 <FormDesc>
                                     If configured, AttendEase will POST attendance data (upon manual trigger from reports page) to this URL. 
-                                    This allows you to integrate attendance information into your custom dashboards or external systems. Ensure the endpoint can handle JSON payloads.
+                                    This allows you to integrate attendance information into your custom dashboards or external systems. Ensure the endpoint can handle JSON payloads containing student IDs, timestamps, course codes, and status.
                                 </FormDesc>
                                 <FormMessage />
                             </FormItem>
@@ -211,24 +212,56 @@ export default function InstituteSettings() {
                         </Button>
                     </form>
                 </Form>
+                 <Alert variant="default" className="mt-4 bg-teal-50 border-teal-200 text-teal-700">
+                    <Webhook className="h-4 w-4 !text-teal-700" />
+                    <AlertTitle>Real-time Webhooks (Planned)</AlertTitle>
+                    <AlertDescription>
+                        Future enhancements will include options for real-time webhook notifications upon specific attendance events (e.g., student marked present/absent).
+                    </AlertDescription>
+                </Alert>
             </div>
 
+            <Separator className="my-8"/>
+
+            {/* API Access Section */}
+            <div className="space-y-4">
+                 <h3 className="text-xl font-semibold flex items-center gap-2"><TerminalSquare className="h-5 w-5 text-primary"/>AttendEase API Access</h3>
+                 <CardDescription>
+                    AttendEase provides RESTful API endpoints for programmatic access to your institute&apos;s data. 
+                    This allows for custom integrations and automation. Authentication is required for API access.
+                </CardDescription>
+                <Alert variant="default" className="bg-blue-50 border-blue-200 text-blue-700">
+                    <KeyRound className="h-4 w-4 !text-blue-700" />
+                    <AlertTitle>API Authentication (OAuth 2.0 / API Keys)</AlertTitle>
+                    <AlertDescription>
+                        Secure access to the API is managed via OAuth 2.0 or API keys. Institutions can generate and manage their API credentials through a dedicated developer portal (coming soon).
+                        <p className="mt-2"><strong>Base URL:</strong> <code>{typeof window !== 'undefined' ? window.location.origin : ''}/api/v1</code></p>
+                        <p className="mt-1 text-xs">Refer to API documentation for available endpoints (e.g., fetching attendance, student data, course info) and authentication methods.</p>
+                         <Button variant="outline" size="sm" className="mt-3" onClick={() => toast({title: "Developer Portal", description: "Developer portal with API key management and detailed documentation is under development."})}>
+                            Access Developer Portal (Coming Soon)
+                        </Button>
+                    </AlertDescription>
+                </Alert>
+            </div>
+
+            <Separator className="my-8"/>
+
             {/* LMS Integrations Section */}
-            <div className="pt-6 border-t mt-8 space-y-4">
+            <div className="space-y-4">
                 <h3 className="text-xl font-semibold mb-3 flex items-center gap-2"><BookOpenCheck className="h-5 w-5 text-primary"/>Learning Management System (LMS) Integrations</h3>
                 <CardDescription className="mb-4">
-                    Connect AttendEase with your existing LMS to streamline data synchronization for student rosters, class schedules, and attendance records.
+                    Connect AttendEase with your existing LMS to streamline data synchronization for student rosters, class schedules, and attendance records. Support for various LMS APIs (e.g., Brightspace Valence) is planned.
                 </CardDescription>
                 
-                <div className="space-y-3">
+                <div className="grid md:grid-cols-2 gap-4">
                     <Card className="p-4 bg-muted/30">
                         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
                             <div>
                                 <h4 className="font-semibold">Brightspace by D2L</h4>
-                                <p className="text-sm text-muted-foreground">Integrate with your Brightspace environment.</p>
+                                <p className="text-sm text-muted-foreground">Integrate with your Brightspace (Valence API).</p>
                             </div>
                             <Button onClick={() => handleLmsIntegration('Brightspace')} variant="outline">
-                                <LinkIcon className="mr-2 h-4 w-4" /> Connect to Brightspace
+                                <LinkIcon className="mr-2 h-4 w-4" /> Configure Brightspace
                             </Button>
                         </div>
                     </Card>
@@ -239,7 +272,7 @@ export default function InstituteSettings() {
                                 <p className="text-sm text-muted-foreground">Connect to your Moodle instance.</p>
                             </div>
                             <Button onClick={() => handleLmsIntegration('Moodle')} variant="outline">
-                                <LinkIcon className="mr-2 h-4 w-4" /> Connect to Moodle
+                                <LinkIcon className="mr-2 h-4 w-4" /> Configure Moodle
                             </Button>
                         </div>
                     </Card>
@@ -250,7 +283,7 @@ export default function InstituteSettings() {
                                 <p className="text-sm text-muted-foreground">Link with your Canvas platform.</p>
                             </div>
                             <Button onClick={() => handleLmsIntegration('Canvas')} variant="outline">
-                               <LinkIcon className="mr-2 h-4 w-4" /> Connect to Canvas
+                               <LinkIcon className="mr-2 h-4 w-4" /> Configure Canvas
                             </Button>
                         </div>
                     </Card>
@@ -258,7 +291,7 @@ export default function InstituteSettings() {
                         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
                             <div>
                                 <h4 className="font-semibold">Other LMS Platforms</h4>
-                                <p className="text-sm text-muted-foreground">We are continuously working to add more integrations.</p>
+                                <p className="text-sm text-muted-foreground">More integrations coming soon.</p>
                             </div>
                              <Button onClick={() => handleLmsIntegration('Other LMS')} variant="outline" disabled>
                                 More Coming Soon
@@ -268,49 +301,64 @@ export default function InstituteSettings() {
                 </div>
             </div>
 
-            {/* API Endpoints Information */}
-            <div className="pt-6 border-t mt-8">
-                 <Alert variant="default" className="bg-purple-50 border-purple-200 text-purple-700">
-                    <TerminalSquare className="h-5 w-5 !text-purple-700" />
-                    <AlertTitle className="font-semibold !text-purple-700">AttendEase API Endpoints</AlertTitle>
-                    <AlertDescription className="!text-purple-700/90">
-                        AttendEase provides RESTful API endpoints for programmatic access to your institute&apos;s data. 
-                        This allows for custom integrations and automation.
-                        <p className="mt-2 text-xs">Base URL: <code>{typeof window !== 'undefined' ? window.location.origin : ''}/api/v1</code></p>
-                        <strong className="block mt-2 text-xs">Available Endpoints:</strong>
-                        <ul className="list-disc list-inside mt-1 space-y-0.5 text-xs">
-                            <li><code>GET /institutes</code> - List all institutes (paginated).</li>
-                            <li><code>GET /institutes/&#123;instituteId&#125;</code> - Get details for a specific institute.</li>
-                            <li><code>GET /institutes/&#123;instituteId&#125;/students</code> - List students for an institute (paginated).</li>
-                            <li><code>GET /students/&#123;studentId&#125;</code> - Get details for a specific student.</li>
-                            <li><code>GET /institutes/&#123;instituteId&#125;/scheduled-classes</code> - List scheduled classes for an institute (paginated).</li>
-                            <li><code>GET /scheduled-classes/&#123;classId&#125;/attendance</code> - Get attendance records for a class (paginated, supports date filter).</li>
-                        </ul>
-                        <p className="mt-2 text-xs">
-                            <strong>Note:</strong> These are read-only endpoints. Write operations and more comprehensive API access are planned for future development. Authentication/authorization mechanisms will be required for secure access.
-                        </p>
-                    </AlertDescription>
-                </Alert>
-            </div>
+            <Separator className="my-8"/>
             
             {/* SIS Integration Information */}
-            <div className="pt-6 border-t mt-8">
-                <Alert variant="default" className="bg-blue-50 border-blue-200 text-blue-700">
-                    <DatabaseZap className="h-5 w-5 !text-blue-700" />
-                    <AlertTitle className="font-semibold !text-blue-700">Student Information System (SIS) Integration (Planned)</AlertTitle>
-                    <AlertDescription className="!text-blue-700/90">
-                        We understand the importance of integrating with your central Student Information System. 
-                        Future development will focus on providing pathways for synchronization with common SIS platforms.
-                        This could involve:
+            <div className="space-y-4">
+                <h3 className="text-xl font-semibold flex items-center gap-2"><DatabaseZap className="h-5 w-5 text-green-600"/>Student Information System (SIS) Integration</h3>
+                <CardDescription>
+                    Integrate AttendEase with your central Student Information System for comprehensive data management. Options include Ed-Fi standard support, CSV exports, and potential SFTP batch processing.
+                </CardDescription>
+                 <Alert variant="default" className="bg-green-50 border-green-200 text-green-700">
+                    <DatabaseZap className="h-5 w-5 !text-green-700" />
+                    <AlertTitle className="font-semibold !text-green-700">Ed-Fi Standard & Data Exchange</AlertTitle>
+                    <AlertDescription className="!text-green-700/90">
+                        We aim to support Ed-Fi Alliance data standards for interoperability with SIS platforms.
                          <ul className="list-disc list-inside mt-1 space-y-0.5 text-xs">
-                            <li>Automated import/sync of student rosters and course enrollments from your SIS.</li>
-                            <li>Export of attendance data back to your SIS for official record-keeping and reporting.</li>
-                            <li>Standardized data formats (e.g., CSV, LIS) and potential direct API integrations where feasible.</li>
+                            <li>Automated import/sync of student rosters and course enrollments.</li>
+                            <li>Export of attendance data back to your SIS.</li>
                         </ul>
-                        <p className="mt-1 text-xs">Our goal is to make AttendEase a complementary tool that enhances your existing SIS by automating the attendance process.</p>
+                        <Button variant="outline" size="sm" className="mt-3 text-green-700 border-green-300 hover:bg-green-100" onClick={() => toast({title: "Ed-Fi Integration", description: "Detailed Ed-Fi integration capabilities are under development."})}>
+                           Learn More (Coming Soon)
+                        </Button>
+                    </AlertDescription>
+                </Alert>
+                <Card className="p-4 bg-muted/30 mt-4">
+                    <h4 className="font-semibold mb-2 flex items-center gap-2"><FileText className="h-4 w-4"/>CSV Exports / SFTP Batch Processing</h4>
+                    <p className="text-sm text-muted-foreground mb-3">
+                        For legacy systems or specific SIS requirements, AttendEase will support CSV data exports of attendance logs. Secure File Transfer Protocol (SFTP) options for batch processing are also planned.
+                    </p>
+                    <Button variant="outline" onClick={() => toast({title: "Data Export Options", description: "Configuration for CSV exports and SFTP batch processing will be available here."})}>
+                        Configure Data Export (Coming Soon)
+                    </Button>
+                </Card>
+                <Card className="p-4 bg-muted/30 mt-4">
+                    <h4 className="font-semibold mb-2 flex items-center gap-2"><Shuffle className="h-4 w-4"/>ID Mapping</h4>
+                    <p className="text-sm text-muted-foreground">
+                        Institutions will be able to map their internal student and course identifiers to AttendEase&apos;s schema to ensure data consistency during synchronization with LMS/SIS.
+                    </p>
+                     <Button variant="outline" className="mt-3" onClick={() => toast({title: "ID Mapping", description: "ID mapping configuration tool is under development."})}>
+                        Configure ID Mapping (Coming Soon)
+                    </Button>
+                </Card>
+            </div>
+
+            <Separator className="my-8"/>
+
+            <div className="space-y-4">
+                <h3 className="text-xl font-semibold flex items-center gap-2"><ShieldCheck className="h-5 w-5 text-red-600"/>Security & Compliance</h3>
+                 <CardDescription>
+                    AttendEase is committed to data security and compliance with educational data privacy regulations.
+                </CardDescription>
+                <Alert variant="destructive" className="bg-red-50 border-red-200 !text-red-700">
+                    <AlertTriangle className="h-4 w-4 !text-red-700"/>
+                    <AlertTitle className="!text-red-700">Data Security & Privacy</AlertTitle>
+                    <AlertDescription className="!text-red-700/90">
+                        Sensitive data, including student facial information (via Face++ tokens) and personal identifiers, is handled with care. Firestore security rules and storage encryption are utilized. We are working towards FERPA and GDPR compliance guidelines. For detailed information on data handling practices, please refer to our privacy policy and security documentation (coming soon).
                     </AlertDescription>
                 </Alert>
             </div>
+
 
         </CardContent>
       </Card>

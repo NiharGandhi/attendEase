@@ -4,6 +4,8 @@ import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import type { Student } from '@/lib/types';
 
+// TODO: Implement API authentication (e.g., API Key, OAuth 2.0) for all API routes.
+
 export async function GET(
   request: Request,
   { params }: { params: { studentId: string } }
@@ -41,3 +43,4 @@ export async function GET(
     return NextResponse.json({ error: 'Failed to fetch student data', details: error.message }, { status: 500 });
   }
 }
+

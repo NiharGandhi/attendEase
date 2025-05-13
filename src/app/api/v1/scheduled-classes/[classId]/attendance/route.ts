@@ -4,6 +4,8 @@ import { collection, getDocs, query, where, orderBy, limit, startAfter, doc, get
 import { db } from '@/lib/firebase';
 import type { AttendanceRecord } from '@/lib/types';
 
+// TODO: Implement API authentication (e.g., API Key, OAuth 2.0) for all API routes.
+
 export async function GET(
   request: Request,
   { params }: { params: { classId: string } }
@@ -73,10 +75,12 @@ export async function GET(
 
     querySnapshot.forEach((docSnap: QueryDocumentSnapshot<DocumentData>) => {
       const recordData = docSnap.data() as Omit<AttendanceRecord, 'id' | 'timestamp'> & { timestamp: Timestamp };
+      // API response includes studentFirebaseId, timestamp, status, method, recognizedAt. Course code can be inferred from scheduledClassId.
       attendanceRecords.push({
         id: docSnap.id,
-        studentFirebaseId: recordData.studentFirebaseId,
-        timestamp: recordData.timestamp.toDate().toISOString() as any, // Convert to ISO string
+        studentFirebaseId: recordData.studentFirebaseId, // student ID
+        scheduledClassId: recordData.scheduledClassId, // Can be used to get course code
+        timestamp: recordData.timestamp.toDate().toISOString() as any, // Convert to ISO string for standard format
         status: recordData.status,
         method: recordData.method,
         recognizedAt: recordData.recognizedAt ? recordData.recognizedAt.toDate().toISOString() as any : undefined,
@@ -95,3 +99,4 @@ export async function GET(
     return NextResponse.json({ error: 'Failed to fetch attendance records', details: error.message }, { status: 500 });
   }
 }
+

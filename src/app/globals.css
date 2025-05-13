@@ -9,7 +9,7 @@ body {
 @layer base {
   :root {
     --background: 0 0% 84%; /* Light Gray (#D6D6D6) */
-    --foreground: 207 100% 14%; /* Deep Blue for text */
+    --foreground: 207 100% 14%; /* Deep Blue (#003049) for text */
 
     --muted: 0 0% 96.1%;
     --muted-foreground: 0 0% 45.1%;
@@ -39,15 +39,15 @@ body {
 
     --radius: 0.5rem;
 
-    /* Sidebar specific colors - retain existing structure but can be themed */
-    --sidebar-background: 0 0% 98%;
-    --sidebar-foreground: 240 5.3% 26.1%;
-    --sidebar-primary: 207 100% 14%;
-    --sidebar-primary-foreground: 0 0% 98%;
-    --sidebar-accent: 174 72% 46%; /* Darker Teal for sidebar accents */
+    /* Sidebar specific colors */
+    --sidebar-background: 0 0% 98%; /* Light background for sidebar */
+    --sidebar-foreground: 207 100% 14%; /* Deep Blue text */
+    --sidebar-primary: 207 100% 14%; /* Deep Blue for active/primary elements */
+    --sidebar-primary-foreground: 0 0% 98%; /* Light text on Deep Blue */
+    --sidebar-accent: 174 72% 46%; /* Darker Teal for sidebar accents if needed, or use main accent */
     --sidebar-accent-foreground: 0 0% 98%;
-    --sidebar-border: 220 13% 91%;
-    --sidebar-ring: 174 72% 56%;
+    --sidebar-border: 0 0% 80%; /* Consistent with main border */
+    --sidebar-ring: 174 72% 56%; /* Consistent with main ring */
   }
 
   .dark {
@@ -81,13 +81,13 @@ body {
     --ring: 174 72% 56%;
 
     /* Sidebar specific colors - dark theme */
-    --sidebar-background: 207 100% 10%;
-    --sidebar-foreground: 0 0% 85%;
-    --sidebar-primary: 174 72% 56%;
-    --sidebar-primary-foreground: 207 100% 8%;
-    --sidebar-accent: 174 72% 46%;
+    --sidebar-background: 207 100% 10%; /* Darker blue for sidebar */
+    --sidebar-foreground: 0 0% 90%; /* Light text */
+    --sidebar-primary: 174 72% 56%; /* Teal for active/primary */
+    --sidebar-primary-foreground: 207 100% 8%; /* Dark text on Teal */
+    --sidebar-accent: 174 72% 46%; /* Darker Teal or main accent */
     --sidebar-accent-foreground: 0 0% 98%;
-    --sidebar-border: 207 100% 15%;
+    --sidebar-border: 207 100% 15%; /* Darker border */
     --sidebar-ring: 174 72% 56%;
   }
 }

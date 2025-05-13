@@ -1,8 +1,10 @@
 
 import { NextResponse } from 'next/server';
-import { collection, getDocs, query, orderBy, limit, startAfter, DocumentData, QueryDocumentSnapshot } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy, limit, startAfter, DocumentData, QueryDocumentSnapshot, doc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import type { Institute } from '@/lib/types';
+
+// TODO: Implement API authentication (e.g., API Key, OAuth 2.0) for all API routes.
 
 export async function GET(request: Request) {
   try {
@@ -60,3 +62,4 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Failed to fetch institutes list', details: error.message }, { status: 500 });
   }
 }
+
