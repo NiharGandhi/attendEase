@@ -20,6 +20,9 @@ import { format } from "date-fns";
 import { Calendar as CalendarIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+const ALL_STUDENTS_VALUE = "__ALL_STUDENTS__";
+const ALL_CLASSES_VALUE = "__ALL_CLASSES__";
+
 export default function AttendanceReports() {
   const { toast } = useToast();
   const searchParams = useSearchParams();
@@ -162,20 +165,26 @@ export default function AttendanceReports() {
               </div>
               <div>
                 <Label htmlFor="studentSelect">Student</Label>
-                <Select onValueChange={setSelectedStudentId} value={selectedStudentId}>
+                <Select 
+                  onValueChange={(value) => setSelectedStudentId(value === ALL_STUDENTS_VALUE ? undefined : value)} 
+                  value={selectedStudentId ?? ALL_STUDENTS_VALUE}
+                >
                   <SelectTrigger id="studentSelect"><SelectValue placeholder="All Students" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">All Students</SelectItem>
+                    <SelectItem value={ALL_STUDENTS_VALUE}>All Students</SelectItem>
                     {students.map(s => <SelectItem key={s.id} value={s.id!}>{s.name} ({s.studentIdNo})</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
               <div>
                 <Label htmlFor="classSelect">Class</Label>
-                <Select onValueChange={setSelectedClassId} value={selectedClassId}>
+                <Select 
+                  onValueChange={(value) => setSelectedClassId(value === ALL_CLASSES_VALUE ? undefined : value)} 
+                  value={selectedClassId ?? ALL_CLASSES_VALUE}
+                >
                   <SelectTrigger id="classSelect"><SelectValue placeholder="All Classes" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">All Classes</SelectItem>
+                    <SelectItem value={ALL_CLASSES_VALUE}>All Classes</SelectItem>
                     {scheduledClasses.map(sc => <SelectItem key={sc.id} value={sc.id!}>{sc.subjectName} ({sc.dayOfWeek} {sc.startTime})</SelectItem>)}
                   </SelectContent>
                 </Select>
@@ -225,3 +234,4 @@ export default function AttendanceReports() {
     </div>
   );
 }
+
