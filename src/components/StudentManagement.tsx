@@ -16,7 +16,7 @@ import { addDoc, collection, query, where, getDocs, serverTimestamp, Timestamp, 
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { useSearchParams } from 'next/navigation';
 import React, { useEffect, useState, useRef } from 'react';
-import { FileUp, PlusCircle, UploadCloud, Trash2, UserCircle2, AlertTriangle } from 'lucide-react';
+import { FileUp, PlusCircle, UploadCloud, Trash2, UserCircle2, AlertTriangle, UsersRound, Edit } from 'lucide-react';
 import Image from 'next/image';
 import {
   Dialog,
@@ -183,11 +183,16 @@ export default function StudentManagement() {
   };
   
   const handleBatchStudentUpload = () => {
-    toast({ title: "Batch Upload", description: "Student batch upload feature is coming soon!"});
+    toast({ title: "Batch Add Students", description: "Student batch upload feature (CSV/Excel) is coming soon!"});
   }
   
   const handleBatchImageUpload = () => {
-    toast({ title: "Batch Image Upload", description: "Batch image upload feature is coming soon!"});
+    toast({ title: "Batch Upload Photos", description: "Batch image upload for multiple students (e.g., ZIP file) is coming soon!"});
+  }
+
+  const handleManageEnrollments = (student: Student) => {
+    // Placeholder for navigating to a page or opening a modal to manage class enrollments for the student
+    toast({ title: "Manage Enrollments", description: `Functionality to manage class enrollments for ${student.name} is coming soon.`});
   }
 
 
@@ -211,7 +216,7 @@ export default function StudentManagement() {
                 <CardTitle className="text-2xl">Manage Students</CardTitle>
                 <CardDescription>Register students, upload photos, and manage records.</CardDescription>
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
                 <Button variant="outline" onClick={() => setShowAddForm(!showAddForm)}>
                     <PlusCircle className="mr-2 h-4 w-4" /> {showAddForm ? 'Cancel' : 'Add Student'}
                 </Button>
@@ -294,7 +299,7 @@ export default function StudentManagement() {
                     <TableCell className="text-right space-x-1">
                         <Dialog onOpenChange={(open) => { if(!open) {setSelectedStudentForImage(null); setImageFile(null); if(imageInputRef.current) imageInputRef.current.value = "";} }}>
                             <DialogTrigger asChild>
-                                <Button variant="outline" size="icon" onClick={() => setSelectedStudentForImage(student)} disabled={!instituteFacesetToken}>
+                                <Button variant="outline" size="icon" onClick={() => setSelectedStudentForImage(student)} disabled={!instituteFacesetToken} title="Upload Student Photo">
                                     <UploadCloud className="h-4 w-4" />
                                 </Button>
                             </DialogTrigger>
@@ -316,7 +321,13 @@ export default function StudentManagement() {
                                 </DialogFooter>
                             </DialogContent>
                         </Dialog>
-                        <Button variant="ghost" size="icon" onClick={() => toast({title: "Delete Student", description: "Delete functionality coming soon."})}>
+                        <Button variant="outline" size="icon" onClick={() => handleManageEnrollments(student)} title="Manage Enrollments">
+                            <UsersRound className="h-4 w-4" />
+                        </Button>
+                         <Button variant="ghost" size="icon" onClick={() => toast({title: "Edit Student", description: "Edit functionality coming soon."})} title="Edit Student">
+                            <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => toast({title: "Delete Student", description: "Delete functionality coming soon."})} title="Delete Student">
                             <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
                     </TableCell>

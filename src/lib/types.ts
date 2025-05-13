@@ -8,6 +8,7 @@ export interface Institute {
   address: string;
   contactEmail: string;
   contactPhone: string;
+  logoUrl?: string; // URL for the institute's logo
   createdAt?: Timestamp;
   adminUid?: string;
   facesetToken?: string; // Face++ FaceSet Token
@@ -73,11 +74,19 @@ export interface AttendanceRecord {
 }
 
 // Used for form validation
-export type InstituteFormData = Omit<Institute, 'id' | 'createdAt' | 'adminUid' | 'facesetToken'> & { adminPassword?: string };
+export type InstituteFormData = Omit<Institute, 'id' | 'createdAt' | 'adminUid' | 'facesetToken' | 'logoUrl'> & { adminPassword?: string };
 export type EmployeeFormData = Omit<Employee, 'id' | 'instituteId' | 'createdAt' | 'firebaseUid'>;
 export type ClassroomFormData = Omit<Classroom, 'id' | 'instituteId' | 'createdAt'>;
 export type StudentFormData = Omit<Student, 'id' | 'instituteId' | 'imageUrl' | 'faceToken' | 'createdAt'>;
 export type ScheduledClassFormData = Omit<ScheduledClass, 'id' | 'createdAt' | 'classroomDiplayName' | 'teacherName'>;
+
+export const instituteSettingsFormSchema = z.object({
+  name: z.string().min(2, { message: 'Institute name must be at least 2 characters.' }),
+  address: z.string().min(5, { message: 'Address must be at least 5 characters.' }),
+  contactEmail: z.string().email({ message: 'Invalid email address.' }),
+  contactPhone: z.string().min(10, { message: 'Phone number must be at least 10 digits.' }),
+});
+export type InstituteSettingsFormData = z.infer<typeof instituteSettingsFormSchema>;
 
 
 export type LoginFormData = z.infer<typeof import('@/components/LoginForm').loginFormSchema>;

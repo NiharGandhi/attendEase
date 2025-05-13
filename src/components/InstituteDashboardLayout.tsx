@@ -4,7 +4,7 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { useSearchParams, usePathname } from 'next/navigation'; // usePathname added
-import { Home, Users, BookOpen, UserCheck, Camera, LogOut, Building, CalendarDays } from 'lucide-react';
+import { Home, Users, BookOpen, UserCheck, Camera, LogOut, Building, CalendarDays, Settings as SettingsIcon, ClipboardList } from 'lucide-react'; // Added SettingsIcon, ClipboardList
 import { Button } from '@/components/ui/button';
 import { SidebarProvider, Sidebar, SidebarTrigger, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarHeader, SidebarInset, SidebarContent, SidebarFooter } from '@/components/ui/sidebar'; // Assuming Sidebar components exist
 import Image from 'next/image';
@@ -25,15 +25,19 @@ export default function InstituteDashboardLayout({ children }: { children: React
     { href: `/institute/employees?instituteId=${instituteId}`, label: 'Employees', icon: Users },
     { href: `/institute/classrooms?instituteId=${instituteId}`, label: 'Classrooms', icon: BookOpen },
     { href: `/institute/students?instituteId=${instituteId}`, label: 'Students', icon: UserCheck },
-    { href: `/institute/schedule?instituteId=${instituteId}`, label: 'Schedule', icon: CalendarDays },
-    { href: `/institute/attendance?instituteId=${instituteId}`, label: 'Attendance', icon: Camera },
+    { href: `/institute/schedule?instituteId=${instituteId}`, label: 'Schedule Classes', icon: CalendarDays },
+    { href: `/institute/timetable?instituteId=${instituteId}`, label: 'View Timetable', icon: CalendarDays }, // New Timetable Link
+    { href: `/institute/attendance?instituteId=${instituteId}`, label: 'Live Attendance', icon: Camera },
+    { href: `/institute/attendance-reports?instituteId=${instituteId}`, label: 'Attendance Reports', icon: ClipboardList }, // New Reports Link
+    { href: `/institute/settings?instituteId=${instituteId}`, label: 'Settings', icon: SettingsIcon }, // New Settings Link
   ] : [];
   
   // Determine if the current path matches the nav item's href
   const isActive = (href: string) => {
     // For dashboard, exact match. For others, startsWith to handle potential sub-routes.
-    if (href.includes('/dashboard')) return pathname === href.split('?')[0];
-    return pathname.startsWith(href.split('?')[0]);
+    const baseHref = href.split('?')[0];
+    if (baseHref.includes('/dashboard')) return pathname === baseHref;
+    return pathname.startsWith(baseHref);
   };
 
 
@@ -89,4 +93,3 @@ export default function InstituteDashboardLayout({ children }: { children: React
     </SidebarProvider>
   );
 }
-

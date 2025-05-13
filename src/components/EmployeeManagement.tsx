@@ -18,7 +18,7 @@ import { db, auth } from '@/lib/firebase'; // auth imported
 import { addDoc, collection, query, where, getDocs, serverTimestamp, Timestamp } from 'firebase/firestore';
 import { useSearchParams } from 'next/navigation';
 import React, { useEffect, useState } from 'react';
-import { FileUp, PlusCircle, Trash2 } from 'lucide-react';
+import { FileUp, PlusCircle, Trash2, UploadCloud } from 'lucide-react'; // Added UploadCloud
 
 // Note: Password field is not included here for simplicity. 
 // Creating users with passwords securely requires more UI/UX.
@@ -120,7 +120,9 @@ export default function EmployeeManagement() {
   }
   
   const handleBatchUpload = () => {
-    toast({ title: "Batch Upload", description: "This feature is coming soon!"});
+    // Placeholder for batch upload functionality
+    // In a real app, this would open a file dialog, parse a CSV/Excel, etc.
+    toast({ title: "Batch Upload Employees", description: "This feature is coming soon! You'll be able to upload a CSV file to add multiple employees at once."});
   }
 
   if (!instituteId) {
@@ -140,7 +142,7 @@ export default function EmployeeManagement() {
                     <PlusCircle className="mr-2 h-4 w-4" /> {showAddForm ? 'Cancel' : 'Add Employee'}
                 </Button>
                 <Button variant="outline" onClick={handleBatchUpload}>
-                    <FileUp className="mr-2 h-4 w-4" /> Batch Upload
+                    <UploadCloud className="mr-2 h-4 w-4" /> Batch Upload Employees
                 </Button>
             </div>
         </CardHeader>
