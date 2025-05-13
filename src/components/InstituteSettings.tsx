@@ -15,7 +15,7 @@ import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import type { Institute, InstituteSettingsFormData } from '@/lib/types';
 import { instituteSettingsFormSchema } from '@/lib/types';
-import { UploadCloud, Building, Link as LinkIcon, Save } from 'lucide-react';
+import { UploadCloud, Building, Link as LinkIcon, Save, Briefcase } from 'lucide-react';
 import Image from 'next/image';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 
@@ -177,7 +177,7 @@ export default function InstituteSettings() {
         <CardContent>
             <Alert>
                 <LinkIcon className="h-4 w-4" />
-                <AlertTitle>Coming Soon!</AlertTitle>
+                <AlertTitle>LMS Integration Coming Soon!</AlertTitle>
                 <AlertDescription>
                     We are working on integrations with popular LMS platforms like Brightspace, Moodle, Canvas, and more. 
                     This will allow for seamless synchronization of student rosters, class schedules, and attendance data.
@@ -186,6 +186,26 @@ export default function InstituteSettings() {
             </Alert>
         </CardContent>
       </Card>
+
+      <Card className="shadow-xl">
+        <CardHeader>
+          <CardTitle className="flex items-center"><Briefcase className="mr-2 h-5 w-5 text-primary"/>External Platform Integrations</CardTitle>
+          <CardDescription>Methods and APIs for integrating AttendEase with other institutional systems.</CardDescription>
+        </CardHeader>
+        <CardContent>
+            <Alert>
+                <Briefcase className="h-4 w-4" />
+                <AlertTitle>API & Webhooks Coming Soon!</AlertTitle>
+                <AlertDescription>
+                    We are developing a robust API and webhook system to enable custom integrations with your existing institutional platforms.
+                    This will provide flexibility for data exchange and workflow automation beyond standard LMS integrations.
+                    More details will be available in our developer documentation.
+                </AlertDescription>
+            </Alert>
+        </CardContent>
+      </Card>
+
     </div>
   );
 }
+
