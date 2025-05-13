@@ -1,7 +1,7 @@
 
 "use client";
 
-import type { ScheduledClass, ScheduledClassFormData, Classroom, Employee, Student, DayOfWeek } from '@/lib/types';
+import type { ScheduledClass, ScheduledClassFormData, Classroom, Employee, Student } from '@/lib/types';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
@@ -30,7 +30,7 @@ import {
   DialogClose
 } from "@/components/ui/dialog";
 import { Label } from '@/components/ui/label';
-import { daysOfWeekArray, timeToMinutes } from '@/lib/types';
+import { DayOfWeek, daysOfWeekArray, timeToMinutes } from '@/lib/types';
 
 const UNASSIGN_TEACHER_VALUE = "--UNASSIGN_TEACHER--";
 
@@ -474,3 +474,5 @@ export default function ScheduledClassManagement() {
     </div>
   );
 }
+
+    
