@@ -80,14 +80,18 @@ export default function TimetableView() {
     let relevantClasses: TimetableEntry[] = [];
 
     allScheduledClasses.forEach(sc => {
-      if (viewMode === 'student' && sc.studentIds.includes(selectedEntityId)) {
-        sc.schedules.forEach(scheduleItem => {
-          relevantClasses.push({ ...sc, specificSchedule: scheduleItem });
-        });
+      if (viewMode === 'student' && sc.studentIds && Array.isArray(sc.studentIds) && sc.studentIds.includes(selectedEntityId)) {
+        if (sc.schedules && Array.isArray(sc.schedules)) {
+          sc.schedules.forEach(scheduleItem => {
+            relevantClasses.push({ ...sc, specificSchedule: scheduleItem });
+          });
+        }
       } else if (viewMode === 'teacher' && sc.teacherId === selectedEntityId) {
-         sc.schedules.forEach(scheduleItem => {
-          relevantClasses.push({ ...sc, specificSchedule: scheduleItem });
-        });
+         if (sc.schedules && Array.isArray(sc.schedules)) {
+            sc.schedules.forEach(scheduleItem => {
+            relevantClasses.push({ ...sc, specificSchedule: scheduleItem });
+            });
+         }
       }
     });
 
@@ -223,3 +227,4 @@ export default function TimetableView() {
     </div>
   );
 }
+
