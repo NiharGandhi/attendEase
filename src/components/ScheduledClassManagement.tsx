@@ -1,9 +1,9 @@
 
 "use client";
 
-import type { ScheduledClass, ScheduledClassFormData, Classroom, Employee, Student, ClassScheduleItem, DayOfWeek } from '@/lib/types';
+import type { ScheduledClass, ScheduledClassFormData, Classroom, Employee, Student, ClassScheduleItem } from '@/lib/types';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useForm, useFieldArray } from 'react-hook-form'; // Added useFieldArray
+import { useForm, useFieldArray } from 'react-hook-form'; 
 import { z } from 'zod';
 import { Button } from '@/components/ui/button';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
@@ -18,7 +18,7 @@ import { db } from '@/lib/firebase';
 import { addDoc, collection, query, where, getDocs, serverTimestamp } from 'firebase/firestore';
 import { useSearchParams } from 'next/navigation';
 import React, { useEffect, useState, useRef } from 'react';
-import { PlusCircle, Trash2, Edit3, UploadCloud, MinusCircle } from 'lucide-react'; // Added MinusCircle
+import { PlusCircle, Trash2, Edit3, UploadCloud, MinusCircle } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -30,7 +30,7 @@ import {
   DialogClose
 } from "@/components/ui/dialog";
 import { Label } from '@/components/ui/label';
-import { daysOfWeekArray, checkScheduleConflict, timeToMinutes } from '@/lib/types'; // Import DayOfWeek enum
+import { daysOfWeekArray, checkScheduleConflict, timeToMinutes, DayOfWeek } from '@/lib/types'; 
 
 const UNASSIGN_TEACHER_VALUE = "--UNASSIGN_TEACHER--"; 
 
@@ -95,7 +95,7 @@ export default function ScheduledClassManagement() {
       subjectCode: '',
       teacherId: undefined, 
       studentIds: [],
-      schedules: [{ dayOfWeek: undefined, startTime: '', endTime: '' }], // Start with one schedule slot
+      schedules: [{ dayOfWeek: undefined, startTime: '', endTime: '' }], 
     },
   });
 
@@ -171,7 +171,7 @@ export default function ScheduledClassManagement() {
         const employeesToUse = currentEmployees || employees;
 
         const fetchedScheduledClasses = scheduledClassSnap.docs.map(d => {
-            const data = d.data() as ScheduledClass; // Assuming data now has 'schedules' array
+            const data = d.data() as ScheduledClass; 
             const classroom = classroomsToUse.find(c => c.id === data.classroomId);
             const teacher = employeesToUse.find(e => e.id === data.teacherId);
             return { 
@@ -240,10 +240,19 @@ export default function ScheduledClassManagement() {
     }
     toast({ title: 'Batch Upload Started', description: `Processing ${batchFile.name}. This feature is in development.` });
     console.log("Batch file selected:", batchFile.name);
+    // Actual batch upload logic would go here:
+    // 1. Read and parse CSV file
+    // 2. Validate each row against a batch schema
+    // 3. For each valid entry:
+    //    - Find or create related entities (classroom, teacher, students by ID/code)
+    //    - Check for schedule conflicts (this is complex for batch)
+    //    - Create ScheduledClass document in Firestore
+    // 4. Report successes and failures
+    
     setBatchFile(null);
     if(batchFileRef.current) batchFileRef.current.value = "";
     setShowBatchUploadDialog(false);
-    await fetchScheduledClassesWithDetails();
+    await fetchScheduledClassesWithDetails(); // Refresh list after (mock) processing
   };
 
 
@@ -274,6 +283,8 @@ export default function ScheduledClassManagement() {
                   <DialogTitle>Batch Schedule Classes</DialogTitle>
                   <DialogDescription>
                     Upload a CSV file to schedule multiple classes. (Feature in development)
+                    <br />Expected CSV columns: subjectName, subjectCode (optional), classroomId, teacherId (optional), studentIds (comma-separated), dayOfWeek, startTime (HH:mm), endTime (HH:mm). 
+                    <br />Multiple rows can exist for the same subject to define multiple schedule slots or assign more students.
                   </DialogDescription>
                 </DialogHeader>
                 <div className="grid gap-4 py-4">
@@ -314,7 +325,7 @@ export default function ScheduledClassManagement() {
                           render={({ field }) => (
                             <FormItem>
                               <FormLabel>Day</FormLabel>
-                              <Select onValueChange={field.onChange} value={field.value}>
+                              <Select onValueChange={field.onChange} value={field.value || ""}>
                                 <FormControl><SelectTrigger><SelectValue placeholder="Select day" /></SelectTrigger></FormControl>
                                 <SelectContent>
                                   {daysOfWeekArray.map(day => <SelectItem key={day} value={day}>{day}</SelectItem>)}
@@ -451,3 +462,4 @@ export default function ScheduledClassManagement() {
     </div>
   );
 }
+
