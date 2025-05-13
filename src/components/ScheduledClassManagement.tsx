@@ -30,7 +30,7 @@ import {
   DialogClose
 } from "@/components/ui/dialog";
 import { Label } from '@/components/ui/label';
-import { daysOfWeekArray, checkScheduleConflict, timeToMinutes, DayOfWeek } from '@/lib/types'; 
+import { DayOfWeek, daysOfWeekArray, checkScheduleConflict, timeToMinutes } from '@/lib/types'; 
 
 const UNASSIGN_TEACHER_VALUE = "--UNASSIGN_TEACHER--"; 
 
@@ -335,8 +335,8 @@ export default function ScheduledClassManagement() {
                             </FormItem>
                           )}
                         />
-                        <FormField control={form.control} name={`schedules.${index}.startTime`} render={({ field }) => (<FormItem><FormLabel>Start Time</FormLabel><FormControl><Input type="time" {...field} /></FormControl><FormMessage /></FormItem>)} />
-                        <FormField control={form.control} name={`schedules.${index}.endTime`} render={({ field }) => (<FormItem><FormLabel>End Time</FormLabel><FormControl><Input type="time" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                        <FormField control={form.control} name={`schedules.${index}.startTime`} render={({ field }) => (<FormItem><FormLabel>Start Time</FormLabel><FormControl><Input type="time" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)} />
+                        <FormField control={form.control} name={`schedules.${index}.endTime`} render={({ field }) => (<FormItem><FormLabel>End Time</FormLabel><FormControl><Input type="time" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)} />
                       </div>
                       {scheduleFields.length > 1 && (
                         <Button type="button" variant="ghost" size="icon" className="absolute top-1 right-1 text-destructive hover:bg-destructive/10" onClick={() => removeSchedule(index)}>
