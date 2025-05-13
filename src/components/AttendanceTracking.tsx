@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'; // Keep for classroom selection
+import { Label } from '@/components/ui/label'; // Added import for Label
 import { Input } from '@/components/ui/input'; // For classroom input
 import { Camera, Users, CheckCircle, XCircle, Loader2, AlertTriangle, CalendarClock, Search } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
@@ -456,3 +457,4 @@ export default function AttendanceTracking() {
     </div>
   );
 }
+
