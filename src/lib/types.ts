@@ -45,15 +45,31 @@ export interface Student {
   createdAt?: Timestamp;
 }
 
+export interface ScheduledClass {
+  id?: string; // Firestore document ID
+  instituteId: string;
+  classroomId: string; // ID of the physical classroom
+  classroomDiplayName?: string; // Denormalized: e.g., "Room 101 - Section A" for display in lists
+  subjectName: string;
+  subjectCode?: string;
+  dayOfWeek: 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday' | 'Saturday' | 'Sunday';
+  startTime: string; // HH:mm format
+  endTime: string; // HH:mm format
+  teacherId?: string; // Employee ID
+  teacherName?: string; // Denormalized for display
+  studentIds: string[]; // Array of Student Firestore IDs enrolled in this class
+  createdAt?: Timestamp;
+}
+
 export interface AttendanceRecord {
   id?: string; // Firestore document ID
   instituteId: string;
-  classroomId: string;
+  scheduledClassId: string; // ID of the ScheduledClass instance
   studentFirebaseId: string; // The Student's Firestore document ID
-  timestamp: Timestamp;
+  timestamp: Timestamp; // Date of the attendance
   status: 'present' | 'absent';
-  recognizedAt?: Timestamp; // Time of recognition
-  method?: 'manual' | 'facial_recognition'; // How attendance was marked
+  recognizedAt?: Timestamp; // Time of recognition if facial
+  method?: 'manual' | 'facial_recognition';
 }
 
 // Used for form validation
@@ -61,5 +77,8 @@ export type InstituteFormData = Omit<Institute, 'id' | 'createdAt' | 'adminUid' 
 export type EmployeeFormData = Omit<Employee, 'id' | 'instituteId' | 'createdAt' | 'firebaseUid'>;
 export type ClassroomFormData = Omit<Classroom, 'id' | 'instituteId' | 'createdAt'>;
 export type StudentFormData = Omit<Student, 'id' | 'instituteId' | 'imageUrl' | 'faceToken' | 'createdAt'>;
+export type ScheduledClassFormData = Omit<ScheduledClass, 'id' | 'createdAt' | 'classroomDiplayName' | 'teacherName'>;
+
 
 export type LoginFormData = z.infer<typeof import('@/components/LoginForm').loginFormSchema>;
+

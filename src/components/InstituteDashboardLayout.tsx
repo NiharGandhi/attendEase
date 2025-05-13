@@ -4,7 +4,7 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { useSearchParams, usePathname } from 'next/navigation'; // usePathname added
-import { Home, Users, BookOpen, UserCheck, Camera, LogOut, Building } from 'lucide-react';
+import { Home, Users, BookOpen, UserCheck, Camera, LogOut, Building, CalendarDays } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SidebarProvider, Sidebar, SidebarTrigger, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarHeader, SidebarInset, SidebarContent, SidebarFooter } from '@/components/ui/sidebar'; // Assuming Sidebar components exist
 import Image from 'next/image';
@@ -25,6 +25,7 @@ export default function InstituteDashboardLayout({ children }: { children: React
     { href: `/institute/employees?instituteId=${instituteId}`, label: 'Employees', icon: Users },
     { href: `/institute/classrooms?instituteId=${instituteId}`, label: 'Classrooms', icon: BookOpen },
     { href: `/institute/students?instituteId=${instituteId}`, label: 'Students', icon: UserCheck },
+    { href: `/institute/schedule?instituteId=${instituteId}`, label: 'Schedule', icon: CalendarDays },
     { href: `/institute/attendance?instituteId=${instituteId}`, label: 'Attendance', icon: Camera },
   ] : [];
   
@@ -88,3 +89,4 @@ export default function InstituteDashboardLayout({ children }: { children: React
     </SidebarProvider>
   );
 }
+
