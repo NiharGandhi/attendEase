@@ -48,7 +48,7 @@ export default function InstituteSettings() {
     } else {
       setIsLoading(false);
       toast({ variant: 'destructive', title: 'Error', description: 'Institute ID is missing.' });
-      router.push('/'); // Or some other appropriate redirect
+      router.push('/'); 
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [instituteId]);
@@ -85,10 +85,10 @@ export default function InstituteSettings() {
       const instituteRef = doc(db, 'institutes', instituteId);
       await updateDoc(instituteRef, {
         ...values,
-        // updatedAt: serverTimestamp(), // Optional: if you want to track updates
+        // updatedAt: serverTimestamp(), 
       });
       toast({ title: 'Settings Updated', description: 'Institute details saved successfully.' });
-      fetchInstituteDetails(); // Re-fetch to update UI if needed
+      fetchInstituteDetails(); 
     } catch (error) {
       toast({ variant: 'destructive', title: 'Error', description: 'Failed to update settings.' });
     } finally {
@@ -129,8 +129,8 @@ export default function InstituteSettings() {
     <div className="space-y-6">
       <Card className="shadow-xl">
         <CardHeader>
-          <CardTitle className="text-2xl flex items-center"><Building className="mr-2 h-6 w-6 text-primary"/>Institute Settings</CardTitle>
-          <CardDescription>Manage your institute&apos;s profile, appearance, and integrations.</CardDescription>
+          <CardTitle className="text-2xl flex items-center"><Building className="mr-2 h-6 w-6 text-primary"/>Institute Profile</CardTitle>
+          <CardDescription>Manage your institute&apos;s general information.</CardDescription>
         </CardHeader>
         <CardContent>
           <Form {...form}>
@@ -184,13 +184,6 @@ export default function InstituteSettings() {
                     Stay tuned for updates!
                 </AlertDescription>
             </Alert>
-             {/* Placeholder for API keys or connection settings if/when available 
-             <div className="mt-4 space-y-2">
-                <Label htmlFor="lmsApiKey">LMS API Key (Example)</Label>
-                <Input id="lmsApiKey" placeholder="Enter your LMS API Key" disabled />
-                <Button disabled>Connect to LMS (Example)</Button>
-             </div>
-             */}
         </CardContent>
       </Card>
     </div>

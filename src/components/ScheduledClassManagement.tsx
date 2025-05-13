@@ -17,8 +17,19 @@ import { useToast } from '@/hooks/use-toast';
 import { db } from '@/lib/firebase';
 import { addDoc, collection, query, where, getDocs, serverTimestamp, Timestamp, doc } from 'firebase/firestore';
 import { useSearchParams } from 'next/navigation';
-import React, { useEffect, useState } from 'react';
-import { PlusCircle, Trash2, Edit3 } from 'lucide-react';
+import React, { useEffect, useState, useRef } from 'react';
+import { PlusCircle, Trash2, Edit3, UploadCloud } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter,
+  DialogClose
+} from "@/components/ui/dialog";
+import { Label } from '@/components/ui/label';
 
 const scheduledClassFormSchema = z.object({
   classroomId: z.string().min(1, "Classroom is required."),
@@ -37,7 +48,7 @@ const scheduledClassFormSchema = z.object({
 });
 
 const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] as const;
-const UNASSIGN_TEACHER_VALUE = "--UNASSIGN_TEACHER--"; // Sentinel value for "None" option
+const UNASSIGN_TEACHER_VALUE = "--UNASSIGN_TEACHER--"; 
 
 export default function ScheduledClassManagement() {
   const { toast } = useToast();
@@ -53,6 +64,9 @@ export default function ScheduledClassManagement() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showAddForm, setShowAddForm] = useState(action === 'add');
+  const [showBatchUploadDialog, setShowBatchUploadDialog] = useState(false);
+  const [batchFile, setBatchFile] = useState<File | null>(null);
+  const batchFileRef = useRef<HTMLInputElement>(null);
 
   const form = useForm<z.infer<typeof scheduledClassFormSchema>>({
     resolver: zodResolver(scheduledClassFormSchema),
@@ -63,14 +77,15 @@ export default function ScheduledClassManagement() {
       dayOfWeek: undefined,
       startTime: '',
       endTime: '',
-      teacherId: undefined, // Use undefined for optional fields not set initially
+      teacherId: undefined, 
       studentIds: [],
     },
   });
 
   useEffect(() => {
     setShowAddForm(action === 'add');
-  }, [action]);
+    if (action === 'add') form.reset();
+  }, [action, form]);
 
   useEffect(() => {
     if (instituteId) {
@@ -100,7 +115,6 @@ export default function ScheduledClassManagement() {
       setEmployees(fetchedEmployees);
       setStudents(studentSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Student)));
       
-      // Fetch scheduled classes after other data to use for display names
       await fetchScheduledClassesWithDetails(fetchedClassrooms, fetchedEmployees);
 
     } catch (error) {
@@ -112,7 +126,7 @@ export default function ScheduledClassManagement() {
   }
   
   async function fetchScheduledClassesWithDetails(
-    currentClassrooms?: Classroom[], // Allow passing current lists to avoid re-fetching if not needed
+    currentClassrooms?: Classroom[], 
     currentEmployees?: Employee[]
   ) {
     if (!instituteId) return;
@@ -153,10 +167,10 @@ export default function ScheduledClassManagement() {
     setIsSubmitting(true);
     try {
       const selectedClassroom = classrooms.find(c => c.id === values.classroomId);
-      const selectedTeacher = employees.find(e => e.id === values.teacherId); // values.teacherId will be undefined if "None" was selected
+      const selectedTeacher = employees.find(e => e.id === values.teacherId); 
 
       const scheduledClassData: ScheduledClassFormData & { createdAt: any } = {
-        ...values, // teacherId will be undefined or a string ID
+        ...values, 
         instituteId,
         classroomDiplayName: selectedClassroom ? `${selectedClassroom.roomNumber} - ${selectedClassroom.section}` : undefined,
         teacherName: selectedTeacher ? selectedTeacher.name : undefined,
@@ -165,7 +179,7 @@ export default function ScheduledClassManagement() {
       };
       await addDoc(collection(db, 'scheduledClasses'), scheduledClassData);
       toast({ title: 'Scheduled Class Added', description: `${values.subjectName} has been scheduled.` });
-      form.reset(); // This will reset teacherId to undefined (its default value)
+      form.reset(); 
       setShowAddForm(false);
       await fetchScheduledClassesWithDetails();
     } catch (error) {
@@ -175,6 +189,31 @@ export default function ScheduledClassManagement() {
       setIsSubmitting(false);
     }
   }
+
+  const handleBatchScheduleUpload = async () => {
+    if (!batchFile) {
+      toast({ variant: 'destructive', title: 'No File', description: 'Please select a CSV file to upload.' });
+      return;
+    }
+    // Placeholder for actual batch upload logic
+    toast({ title: 'Batch Upload Started', description: `Processing ${batchFile.name}. This feature is in development.` });
+    console.log("Batch file selected:", batchFile.name);
+    // TODO: Implement CSV parsing and batch Firestore writes.
+    // Example steps:
+    // 1. Read batchFile content (e.g., using FileReader)
+    // 2. Parse CSV data (e.g., using a library like papaparse)
+    // 3. For each row:
+    //    a. Validate data against a schema
+    //    b. Map to ScheduledClassFormData
+    //    c. Resolve Classroom IDs, Teacher IDs, Student IDs based on names/codes if needed
+    // 4. Use Firestore batch write to add all valid scheduled classes
+    // 5. Provide success/error feedback.
+    setBatchFile(null);
+    if(batchFileRef.current) batchFileRef.current.value = "";
+    setShowBatchUploadDialog(false);
+    await fetchScheduledClassesWithDetails(); // Refresh list after potential (mock) upload
+  };
+
 
   if (!instituteId) {
     return <p className="text-destructive text-center p-4">Institute ID not found.</p>;
@@ -188,9 +227,37 @@ export default function ScheduledClassManagement() {
             <CardTitle className="text-2xl">Manage Class Schedule</CardTitle>
             <CardDescription>Define subjects, timings, and assign students to classes.</CardDescription>
           </div>
-          <Button variant="outline" onClick={() => { setShowAddForm(!showAddForm); form.reset(); }}>
-            <PlusCircle className="mr-2 h-4 w-4" /> {showAddForm ? 'Cancel' : 'Add Scheduled Class'}
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => { setShowAddForm(!showAddForm); form.reset(); }}>
+              <PlusCircle className="mr-2 h-4 w-4" /> {showAddForm ? 'Cancel' : 'Add Schedule'}
+            </Button>
+            <Dialog open={showBatchUploadDialog} onOpenChange={setShowBatchUploadDialog}>
+              <DialogTrigger asChild>
+                <Button variant="outline">
+                  <UploadCloud className="mr-2 h-4 w-4" /> Batch Schedule
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Batch Schedule Classes</DialogTitle>
+                  <DialogDescription>
+                    Upload a CSV file to schedule multiple classes. Ensure your CSV has columns for:
+                    SubjectName, SubjectCode (Optional), ClassroomID, TeacherID (Optional), DayOfWeek, StartTime (HH:mm), EndTime (HH:mm), StudentIDNos (comma-separated).
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="grid gap-4 py-4">
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="batchFile" className="text-right">CSV File</Label>
+                    <Input id="batchFile" type="file" accept=".csv" className="col-span-3" ref={batchFileRef} onChange={(e) => setBatchFile(e.target.files ? e.target.files[0] : null)} />
+                  </div>
+                </div>
+                <DialogFooter>
+                  <DialogClose asChild><Button variant="ghost">Cancel</Button></DialogClose>
+                  <Button onClick={handleBatchScheduleUpload} disabled={!batchFile}>Process File</Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </div>
         </CardHeader>
         {showAddForm && (
           <CardContent>
@@ -221,12 +288,13 @@ export default function ScheduledClassManagement() {
                         <FormLabel>Teacher (Optional)</FormLabel>
                         <Select 
                           onValueChange={(value) => field.onChange(value === UNASSIGN_TEACHER_VALUE ? undefined : value)} 
-                          value={field.value} // Can be undefined, a teacher ID
+                          value={field.value || UNASSIGN_TEACHER_VALUE} 
                         >
                           <FormControl><SelectTrigger><SelectValue placeholder="Select a teacher" /></SelectTrigger></FormControl>
                           <SelectContent>
                             <SelectItem value={UNASSIGN_TEACHER_VALUE}>None (Clear Selection)</SelectItem>
-                            {employees.map(e => <SelectItem key={e.id} value={e.id!}>{e.name}</SelectItem>)}
+                            {employees.filter(e => e.role === 'teacher').map(e => <SelectItem key={e.id} value={e.id!}>{e.name}</SelectItem>)}
+                             {employees.filter(e => e.role === 'teacher').length === 0 && <SelectItem value="no_teachers" disabled>No teachers found</SelectItem>}
                           </SelectContent>
                         </Select>
                         <FormMessage />
@@ -238,15 +306,14 @@ export default function ScheduledClassManagement() {
                 <FormField 
                   control={form.control} 
                   name="subjectName" 
-                  render={({ field }) => { 
-                    return (
+                  render={({ field }) => (
                       <FormItem>
                         <FormLabel>Subject Name</FormLabel>
                         <FormControl><Input placeholder="e.g., Mathematics 101" {...field} /></FormControl>
                         <FormMessage />
                       </FormItem>
-                    );
-                  }} 
+                    )
+                  } 
                 />
                 <FormField control={form.control} name="subjectCode" render={({ field }) => (<FormItem><FormLabel>Subject Code (Optional)</FormLabel><FormControl><Input placeholder="e.g., MATH101" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)} />
 
