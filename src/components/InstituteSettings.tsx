@@ -15,7 +15,7 @@ import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import type { Institute, InstituteSettingsFormData } from '@/lib/types';
 import { instituteSettingsFormSchema } from '@/lib/types';
-import { UploadCloud, Building, LinkIcon as LinkExternalIcon, Save, Settings2, Webhook, DatabaseZap } from 'lucide-react';
+import { UploadCloud, Building, LinkIcon as LinkExternalIcon, Save, Settings2, Webhook, DatabaseZap, TerminalSquare } from 'lucide-react';
 import Image from 'next/image';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 
@@ -175,7 +175,7 @@ export default function InstituteSettings() {
       <Card className="shadow-xl border-t-4 border-accent">
         <CardHeader>
           <CardTitle className="text-2xl flex items-center gap-2"><Webhook className="h-6 w-6 text-accent"/>External Integrations & Data Export</CardTitle>
-          <CardDescription>Configure webhooks and learn about upcoming API and system integrations.</CardDescription>
+          <CardDescription>Configure webhooks and learn about API and system integrations.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
            <Form {...form}> {/* Use the same form instance */}
@@ -201,6 +201,28 @@ export default function InstituteSettings() {
             </form>
           </Form>
 
+             <Alert variant="default" className="bg-purple-50 border-purple-200 text-purple-700">
+                <TerminalSquare className="h-5 w-5 !text-purple-700" />
+                <AlertTitle className="font-semibold !text-purple-700">AttendEase API Endpoints</AlertTitle>
+                <AlertDescription className="!text-purple-700/90">
+                    AttendEase provides RESTful API endpoints for programmatic access to your institute&apos;s data. 
+                    This allows for custom integrations and automation.
+                    <p className="mt-2 text-xs">Base URL: <code>{typeof window !== 'undefined' ? window.location.origin : ''}/api/v1</code></p>
+                    <strong className="block mt-2 text-xs">Available Endpoints:</strong>
+                    <ul className="list-disc list-inside mt-1 space-y-0.5 text-xs">
+                        <li><code>GET /institutes</code> - List all institutes (paginated).</li>
+                        <li><code>GET /institutes/&#123;instituteId&#125;</code> - Get details for a specific institute.</li>
+                        <li><code>GET /institutes/&#123;instituteId&#125;/students</code> - List students for an institute (paginated).</li>
+                        <li><code>GET /students/&#123;studentId&#125;</code> - Get details for a specific student.</li>
+                        <li><code>GET /institutes/&#123;instituteId&#125;/scheduled-classes</code> - List scheduled classes for an institute (paginated).</li>
+                        <li><code>GET /scheduled-classes/&#123;classId&#125;/attendance</code> - Get attendance records for a class (paginated, supports date filter).</li>
+                    </ul>
+                    <p className="mt-2 text-xs">
+                        <strong>Note:</strong> These are read-only endpoints. Write operations and more comprehensive API access are planned for future development. Authentication/authorization mechanisms will be required for secure access.
+                    </p>
+                </AlertDescription>
+            </Alert>
+
             <Alert variant="default" className="bg-accent/10 border-accent/30 mt-8">
                 <LinkExternalIcon className="h-5 w-5 text-accent" />
                 <AlertTitle className="text-accent font-semibold">LMS Integration (Planned)</AlertTitle>
@@ -211,24 +233,6 @@ export default function InstituteSettings() {
                 </AlertDescription>
             </Alert>
             
-            <Alert variant="default" className="bg-secondary/50 border-secondary/70">
-                <Settings2 className="h-5 w-5 text-secondary-foreground" />
-                <AlertTitle className="text-secondary-foreground font-semibold">Developer API (Planned)</AlertTitle>
-                <AlertDescription className="text-muted-foreground">
-                    A comprehensive RESTful API is planned for future development. This API will allow your developers to programmatically access and manage data within AttendEase, including student information, class schedules, attendance records, and more. 
-                    This will empower you to build custom dashboards, automate administrative tasks, or integrate AttendEase deeply with your proprietary internal systems.
-                    <br/>
-                    <strong>Key features will include:</strong>
-                    <ul className="list-disc list-inside mt-1 space-y-0.5 text-xs">
-                        <li>Secure, token-based authentication.</li>
-                        <li>Endpoints for CRUD (Create, Read, Update, Delete) operations on core data entities.</li>
-                        <li>Query capabilities to filter and retrieve specific data sets.</li>
-                        <li>Webhooks for real-time event notifications (e.g., new student registration, attendance session completion) allowing your other applications to react instantly.</li>
-                    </ul>
-                    <p className="mt-1 text-xs">Detailed developer documentation will be provided upon release.</p>
-                </AlertDescription>
-            </Alert>
-
             <Alert variant="default" className="bg-blue-50 border-blue-200 text-blue-700">
                 <DatabaseZap className="h-5 w-5 !text-blue-700" />
                 <AlertTitle className="font-semibold !text-blue-700">Student Information System (SIS) Integration (Planned)</AlertTitle>
@@ -251,4 +255,3 @@ export default function InstituteSettings() {
     </div>
   );
 }
-
