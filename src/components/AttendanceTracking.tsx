@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useEffect, useRef, useState } from 'react';
@@ -138,13 +137,13 @@ export default function AttendanceTracking() {
       // Generate Class Occurrences for the dropdown
       const occurrences: ClassOccurrence[] = [];
       fetchedScheduledClasses.forEach(sc => {
-        sc.schedules.forEach((scheduleItem, index) => {
+        (sc.schedules || []).forEach((scheduleItem, index) => { // Ensure schedules is an array
           occurrences.push({
             id: `${sc.id}_${index}`, // Composite key
             scheduledClassId: sc.id!,
             scheduleItem,
             displayText: `${sc.subjectName} (${sc.classroomDiplayName || 'N/A'}) - ${scheduleItem.dayOfWeek} ${scheduleItem.startTime}-${scheduleItem.endTime}`,
-            studentIds: sc.studentIds,
+            studentIds: sc.studentIds || [], // Ensure studentIds is an array
             subjectName: sc.subjectName,
             classroomDiplayName: sc.classroomDiplayName
           });
@@ -154,6 +153,7 @@ export default function AttendanceTracking() {
 
     } catch (error) {
       toast({ variant: 'destructive', title: 'Error', description: 'Failed to fetch initial attendance data.' });
+      console.error("AttendanceTracking - fetchInitialData error:", error);
     }
   }
   
