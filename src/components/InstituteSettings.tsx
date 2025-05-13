@@ -15,7 +15,7 @@ import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import type { Institute, InstituteSettingsFormData } from '@/lib/types';
 import { instituteSettingsFormSchema } from '@/lib/types';
-import { UploadCloud, Building, Save, Settings2, Webhook, DatabaseZap, TerminalSquare, BookOpenCheck, Link as LinkIcon, KeyRound, FileText, Shuffle } from 'lucide-react';
+import { UploadCloud, Building, Save, Settings2, Webhook, DatabaseZap, TerminalSquare, BookOpenCheck, Link as LinkIcon, KeyRound, FileText, Shuffle, AlertTriangle, ShieldCheck } from 'lucide-react';
 import Image from 'next/image';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
