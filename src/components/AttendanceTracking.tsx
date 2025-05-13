@@ -7,16 +7,15 @@ import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'; // Keep for classroom selection
-import { Label } from '@/components/ui/label'; // Added import for Label
-import { Input } from '@/components/ui/input'; // For classroom input
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
 import { Camera, Users, CheckCircle, XCircle, Loader2, AlertTriangle, CalendarClock, Search } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 import type { Student, AttendanceRecord, ScheduledClass, Classroom, DayOfWeek } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { collection, query, where, getDocs, serverTimestamp, addDoc, Timestamp, doc, writeBatch, getDoc as firestoreGetDoc } from 'firebase/firestore';
 import { searchFaceAction, getInstituteFacesetToken } from '@/actions/faceplusplus';
-import { daysOfWeekArray, timeToMinutes } from '@/lib/types'; // Import utilities
+import { daysOfWeekArray, timeToMinutes } from '@/lib/types'; 
 
 interface RecognizedStudentInfo extends Student {
   status: 'present' | 'unknown' | 'absent';
@@ -45,14 +44,17 @@ export default function AttendanceTracking() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [isFindingClass, setIsFindingClass] = useState(false);
   const [instituteFacesetToken, setInstituteFacesetToken] = useState<string | null>(null);
+  const [isLoadingInitialData, setIsLoadingInitialData] = useState(true);
   
   const attendanceIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
 
   useEffect(() => {
     if (instituteId) {
-      fetchInitialData(); // Fetches all classrooms and all scheduled classes
+      fetchInitialData(); 
       fetchFacesetToken();
+    } else {
+      setIsLoadingInitialData(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [instituteId]);
@@ -107,7 +109,11 @@ export default function AttendanceTracking() {
   }
 
   async function fetchInitialData() {
-    if (!instituteId) return;
+    if (!instituteId) {
+        setIsLoadingInitialData(false);
+        return;
+    }
+    setIsLoadingInitialData(true);
     try {
       const classroomQuery = query(collection(db, 'classrooms'), where('instituteId', '==', instituteId));
       const scheduledClassQuery = query(collection(db, 'scheduledClasses'), where('instituteId', '==', instituteId));
@@ -134,6 +140,8 @@ export default function AttendanceTracking() {
     } catch (error) {
       toast({ variant: 'destructive', title: 'Error', description: 'Failed to fetch initial attendance data.' });
       console.error("AttendanceTracking - fetchInitialData error:", error);
+    } finally {
+      setIsLoadingInitialData(false);
     }
   }
   
@@ -154,7 +162,7 @@ export default function AttendanceTracking() {
         const studentDocs = await Promise.all(studentDetailsPromises);
         
         const fetchedStudents = studentDocs
-            .filter(docSnap => docSnap.exists() && docSnap.data()?.faceToken) // Only include students with face tokens
+            .filter(docSnap => docSnap.exists() && docSnap.data()?.faceToken) 
             .map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as Student));
         
         setStudentsForSession(fetchedStudents); 
@@ -179,10 +187,10 @@ export default function AttendanceTracking() {
       return;
     }
     setIsFindingClass(true);
-    setCurrentActiveClass(null); // Reset previous active class
+    setCurrentActiveClass(null); 
 
     const now = new Date();
-    const currentDay = daysOfWeekArray[now.getDay() === 0 ? 6 : now.getDay() - 1] as DayOfWeek; // Sunday is 0, Monday is 1 etc.
+    const currentDay = daysOfWeekArray[now.getDay() === 0 ? 6 : now.getDay() - 1] as DayOfWeek; 
     const currentTimeInMinutes = now.getHours() * 60 + now.getMinutes();
 
     const potentialClasses = allScheduledClasses.filter(sc => {
@@ -199,9 +207,7 @@ export default function AttendanceTracking() {
       setCurrentActiveClass(potentialClasses[0]);
       toast({ title: 'Class Found', description: `Current class: ${potentialClasses[0].subjectName} in ${potentialClasses[0].classroomDiplayName}` });
     } else if (potentialClasses.length > 1) {
-      // TODO: Handle multiple classes in the same room at the same time (e.g., prompt user to select)
-      // For now, take the first one or show an error.
-      setCurrentActiveClass(potentialClasses[0]); // Or handle ambiguity
+      setCurrentActiveClass(potentialClasses[0]); 
       toast({ variant: 'default', title: 'Multiple Classes Found', description: `Multiple classes ongoing. Selected ${potentialClasses[0].subjectName}. Please verify.` });
     } else {
       toast({ variant: 'destructive', title: 'No Class Found', description: 'No class scheduled in this classroom at the current time.' });
@@ -324,15 +330,10 @@ export default function AttendanceTracking() {
             toast({ variant: 'destructive', title: 'Save Error', description: 'Could not save attendance records.' });
         }
     }
-    // Optionally reset currentActiveClass and selectedClassroomId here if desired
-    // setCurrentActiveClass(null);
-    // setSelectedClassroomId(null);
-    // setStudentsForSession([]);
-    // setSessionAttendance(new Map());
     toast({ title: 'Attendance Tracking Stopped' });
   };
 
-  if (!instituteId) {
+  if (!instituteId && !isLoadingInitialData) { // Check isLoadingInitialData as well
     return <p className="text-destructive text-center p-4">Institute ID not found.</p>;
   }
   
@@ -340,7 +341,7 @@ export default function AttendanceTracking() {
 
   return (
     <div className="space-y-6">
-      {!instituteFacesetToken && (
+      {!instituteFacesetToken && !isLoadingInitialData && ( // Check isLoadingInitialData
          <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
           <AlertTitle>Facial Recognition Not Configured</AlertTitle>
@@ -375,28 +376,37 @@ export default function AttendanceTracking() {
               <div className="flex flex-col sm:flex-row gap-2 items-end">
                 <div className="flex-grow">
                   <Label htmlFor="classroom-select">Classroom</Label>
-                  <Select onValueChange={setSelectedClassroomId} value={selectedClassroomId || ""} disabled={isTracking || isFindingClass}>
+                  <Select 
+                    onValueChange={setSelectedClassroomId} 
+                    value={selectedClassroomId || ""} 
+                    disabled={isTracking || isFindingClass || isLoadingInitialData}
+                  >
                     <SelectTrigger id="classroom-select" className="w-full min-w-[200px]">
                       <SelectValue placeholder="Select Classroom" />
                     </SelectTrigger>
                     <SelectContent>
-                      {allClassrooms.length === 0 && <SelectItem value="no-classrooms" disabled>No classrooms found</SelectItem>}
-                      {allClassrooms.map(cr => (
-                          <SelectItem key={cr.id} value={cr.id!}>
-                              {cr.roomNumber} - {cr.section}
-                          </SelectItem>
-                      ))}
+                      {isLoadingInitialData ? (
+                        <SelectItem value="loading-classrooms" disabled>Loading classrooms...</SelectItem>
+                      ) : allClassrooms.length === 0 ? (
+                        <SelectItem value="no-classrooms" disabled>No classrooms found</SelectItem>
+                      ) : (
+                        allClassrooms.map(cr => (
+                            <SelectItem key={cr.id} value={cr.id!}>
+                                {cr.roomNumber} - {cr.section}
+                            </SelectItem>
+                        ))
+                      )}
                     </SelectContent>
                   </Select>
                 </div>
-                 <Button onClick={findAndSetCurrentClass} disabled={!selectedClassroomId || isTracking || isFindingClass} className="w-full sm:w-auto">
+                 <Button onClick={findAndSetCurrentClass} disabled={!selectedClassroomId || isTracking || isFindingClass || isLoadingInitialData} className="w-full sm:w-auto">
                    <Search className="mr-2 h-4 w-4" /> {isFindingClass ? "Finding..." : "Find Current Class"}
                  </Button>
               </div>
 
               <div className="flex flex-col sm:flex-row gap-2">
                 {!isTracking ? (
-                  <Button onClick={startTracking} disabled={!hasCameraPermission || !currentActiveClass || isProcessing || !instituteFacesetToken || isFindingClass} className="w-full sm:w-auto bg-accent hover:bg-accent/90 text-accent-foreground">
+                  <Button onClick={startTracking} disabled={!hasCameraPermission || !currentActiveClass || isProcessing || !instituteFacesetToken || isFindingClass || isLoadingInitialData} className="w-full sm:w-auto bg-accent hover:bg-accent/90 text-accent-foreground">
                     <CalendarClock className="mr-2 h-4 w-4" /> Start Tracking
                   </Button>
                 ) : (
@@ -457,4 +467,3 @@ export default function AttendanceTracking() {
     </div>
   );
 }
-
