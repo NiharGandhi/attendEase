@@ -12,14 +12,28 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
 import { db, auth } from '@/lib/firebase';
-import { addDoc, collection, query, where, getDocs, serverTimestamp, Timestamp, doc, deleteDoc } from 'firebase/firestore';
+import {
+  addDoc,
+  collection,
+  query,
+  where,
+  getDocs,
+  serverTimestamp,
+  Timestamp,
+  doc,
+  deleteDoc,
+  updateDoc
+} from 'firebase/firestore';
+import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { useSearchParams } from 'next/navigation';
-import React, { useEffect, useState } from 'react';
-import { FileUp, PlusCircle, Trash2, Pencil, Loader2 } from 'lucide-react';
+import React, { useEffect, useState, useRef } from 'react';
+import { FileUp, PlusCircle, Trash2, Pencil, Loader2, UserPlus, Download, Upload } from 'lucide-react';
 import { format } from 'date-fns';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from './ui/alert-dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { read, utils } from 'xlsx';
+import * as Papa from 'papaparse';
 
 // Enhanced validation schema
 const employeeFormSchema = z.object({
@@ -35,14 +49,35 @@ const employeeFormSchema = z.object({
     .regex(/^\+?[0-9\s-]{6,20}$/, { message: "Invalid phone number." })
     .optional()
     .or(z.literal('')),
+  createAccount: z.boolean().optional(),
 });
 
-// Role options with descriptions
+// Role options with descriptions and colors
 const ROLE_OPTIONS = [
-  { value: 'teacher', label: 'Teacher', description: 'Can manage classes and students' },
-  { value: 'admin', label: 'Administrator', description: 'Full access to institute management' },
-  { value: 'staff', label: 'Staff', description: 'Limited access based on permissions' },
-  { value: 'support', label: 'Support', description: 'Access to help desk features' },
+  {
+    value: 'teacher',
+    label: 'Teacher',
+    description: 'Can manage classes and students',
+    color: 'bg-purple-100 text-purple-800'
+  },
+  {
+    value: 'admin',
+    label: 'Administrator',
+    description: 'Full access to institute management',
+    color: 'bg-red-100 text-red-800'
+  },
+  {
+    value: 'staff',
+    label: 'Staff',
+    description: 'Limited access based on permissions',
+    color: 'bg-blue-100 text-blue-800'
+  },
+  {
+    value: 'support',
+    label: 'Support',
+    description: 'Access to help desk features',
+    color: 'bg-green-100 text-green-800'
+  },
 ];
 
 export default function EmployeeManagement() {
@@ -58,6 +93,10 @@ export default function EmployeeManagement() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [employeeToDelete, setEmployeeToDelete] = useState<string | null>(null);
+  const [batchUploadOpen, setBatchUploadOpen] = useState(false);
+  const [batchFile, setBatchFile] = useState<File | null>(null);
+  const [isBatchProcessing, setIsBatchProcessing] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const form = useForm<z.infer<typeof employeeFormSchema>>({
     resolver: zodResolver(employeeFormSchema),
@@ -66,6 +105,7 @@ export default function EmployeeManagement() {
       email: '',
       role: '',
       phone: '',
+      createAccount: false,
     },
   });
 
@@ -98,6 +138,7 @@ export default function EmployeeManagement() {
         phone: doc.data().phone || '',
         createdAt: doc.data().createdAt,
         instituteId: doc.data().instituteId,
+        hasAccount: doc.data().hasAccount || false,
       } as Employee));
 
       // Sort by creation date (newest first)
@@ -144,12 +185,30 @@ export default function EmployeeManagement() {
         throw new Error('This email is already registered in this institute.');
       }
 
+      // Create auth account if requested
+      let hasAccount = false;
+      if (values.createAccount) {
+        try {
+          await createUserWithEmailAndPassword(auth, values.email, generateTemporaryPassword());
+          hasAccount = true;
+          toast({
+            title: 'Account Created',
+            description: `A temporary password has been generated for ${values.email}. They should reset it on first login.`,
+            variant: 'default',
+          });
+        } catch (authError) {
+          console.error('Error creating auth account:', authError);
+          throw new Error('Failed to create user account. The email may already be in use.');
+        }
+      }
+
       const employeeData = {
         ...values,
         email: values.email.toLowerCase(), // normalize email
         instituteId,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
+        hasAccount,
       };
 
       await addDoc(collection(db, 'employees'), employeeData);
@@ -175,6 +234,15 @@ export default function EmployeeManagement() {
       setIsSubmitting(false);
     }
   }
+
+  const generateTemporaryPassword = () => {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*';
+    let password = '';
+    for (let i = 0; i < 12; i++) {
+      password += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return password;
+  };
 
   const handleDeleteClick = (employeeId: string) => {
     setEmployeeToDelete(employeeId);
@@ -209,23 +277,167 @@ export default function EmployeeManagement() {
     }
   };
 
-  const handleBatchUpload = () => {
-    toast({
-      title: "Batch Upload",
-      description: "Download our template file to prepare your employee data.",
-      action: (
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => {
-            // In a real app, this would download a template CSV/Excel file
-            toast({ description: "Template download started." });
-          }}
-        >
-          Download Template
-        </Button>
-      ),
-    });
+  const handleBatchUploadClick = () => {
+    setBatchUploadOpen(true);
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      setBatchFile(e.target.files[0]);
+    }
+  };
+
+  const processBatchFile = async () => {
+    if (!batchFile || !instituteId) return;
+
+    setIsBatchProcessing(true);
+    try {
+      const fileType = batchFile.name.split('.').pop()?.toLowerCase();
+      let employeesToAdd: any[] = [];
+
+      if (fileType === 'csv') {
+        // Process CSV
+        const text = await batchFile.text();
+        const result = Papa.parse(text, { header: true });
+        employeesToAdd = result.data
+          .filter((row: any) => row.name && row.email && row.role)
+          .map((row: any) => ({
+            name: row.name.trim(),
+            email: row.email.trim().toLowerCase(),
+            role: row.role.trim().toLowerCase(),
+            phone: row.phone?.trim() || '',
+            instituteId,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+            hasAccount: false,
+          }));
+      } else if (fileType === 'xlsx' || fileType === 'xls') {
+        // Process Excel
+        const arrayBuffer = await batchFile.arrayBuffer();
+        const workbook = read(arrayBuffer);
+        const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+        const jsonData = utils.sheet_to_json(worksheet);
+        employeesToAdd = jsonData
+          .filter((row: any) => row.name && row.email && row.role)
+          .map((row: any) => ({
+            name: row.name.trim(),
+            email: row.email.trim().toLowerCase(),
+            role: row.role.trim().toLowerCase(),
+            phone: row.phone?.trim() || '',
+            instituteId,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+            hasAccount: false,
+          }));
+      } else {
+        throw new Error('Unsupported file type. Please upload a CSV or Excel file.');
+      }
+
+      // Check for duplicates
+      const existingEmails = new Set(employees.map(e => e.email));
+      const duplicates = employeesToAdd.filter(e => existingEmails.has(e.email));
+
+      if (duplicates.length > 0) {
+        toast({
+          variant: 'destructive',
+          title: 'Duplicate Emails Found',
+          description: `${duplicates.length} employees were skipped because their emails already exist.`,
+        });
+        employeesToAdd = employeesToAdd.filter(e => !existingEmails.has(e.email));
+      }
+
+      // Add to Firestore
+      const batchPromises = employeesToAdd.map(employee =>
+        addDoc(collection(db, 'employees'), employee)
+      );
+
+      await Promise.all(batchPromises);
+
+      toast({
+        title: 'Batch Upload Complete',
+        description: `Successfully added ${employeesToAdd.length} employees.`,
+        variant: 'default',
+      });
+
+      setBatchFile(null);
+      setBatchUploadOpen(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      await fetchEmployees();
+    } catch (error: any) {
+      console.error('Error processing batch file:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: error.message || 'Failed to process batch file. Please check the format and try again.',
+      });
+    } finally {
+      setIsBatchProcessing(false);
+    }
+  };
+
+  const downloadTemplate = () => {
+    // Create template data
+    const templateData = [
+      {
+        name: 'John Doe',
+        email: 'john.doe@example.com',
+        role: 'teacher',
+        phone: '+1234567890'
+      },
+      {
+        name: 'Jane Smith',
+        email: 'jane.smith@example.com',
+        role: 'admin',
+        phone: '+1987654321'
+      }
+    ];
+
+    // Convert to CSV
+    const csv = Papa.unparse(templateData);
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', 'employee_template.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const createAccountForEmployee = async (employeeId: string, email: string) => {
+    if (!email) {
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'Email is required to create an account.',
+      });
+      return;
+    }
+
+    try {
+      await createUserWithEmailAndPassword(auth, email, generateTemporaryPassword());
+
+      // Update employee record
+      await updateDoc(doc(db, 'employees', employeeId), {
+        hasAccount: true,
+        updatedAt: serverTimestamp(),
+      });
+
+      toast({
+        title: 'Account Created',
+        description: `A temporary password has been generated for ${email}. They should reset it on first login.`,
+        variant: 'default',
+      });
+
+      await fetchEmployees();
+    } catch (error) {
+      console.error('Error creating account:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'Failed to create user account. The email may already be in use.',
+      });
+    }
   };
 
   if (!instituteId) {
@@ -244,20 +456,102 @@ export default function EmployeeManagement() {
 
   return (
     <div className="space-y-6">
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently remove the employee from your institute.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteEmployee}
+              disabled={deletingId !== null}
+            >
+              {deletingId ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : null}
+              Confirm
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Batch Upload Dialog */}
+      <AlertDialog open={batchUploadOpen} onOpenChange={setBatchUploadOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Batch Upload Employees</AlertDialogTitle>
+            <AlertDialogDescription>
+              Upload a CSV or Excel file to add multiple employees at once.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="flex flex-col items-center justify-center border-2 border-dashed rounded-lg p-6 space-y-2">
+              <Upload className="h-8 w-8 text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">
+                {batchFile ? batchFile.name : 'Drag and drop your file here, or click to select'}
+              </p>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".csv,.xlsx,.xls"
+                onChange={handleFileChange}
+                className="hidden"
+              />
+              <Button
+                variant="outline"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                Select File
+              </Button>
+            </div>
+            <div className="text-sm text-muted-foreground">
+              <p>Your file should include these columns:</p>
+              <ul className="list-disc pl-5 mt-1 space-y-1">
+                <li><span className="font-medium">name</span> (required)</li>
+                <li><span className="font-medium">email</span> (required)</li>
+                <li><span className="font-medium">role</span> (required)</li>
+                <li><span className="font-medium">phone</span> (optional)</li>
+              </ul>
+            </div>
+          </div>
+          <AlertDialogFooter>
+            <Button variant="outline" onClick={downloadTemplate}>
+              <Download className="mr-2 h-4 w-4" />
+              Download Template
+            </Button>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={processBatchFile}
+              disabled={!batchFile || isBatchProcessing}
+            >
+              {isBatchProcessing ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : null}
+              Upload
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Header Card with Actions */}
-      <Card className="shadow-sm">
+      <Card className="shadow-sm border-0 bg-gradient-to-r from-blue-50 to-purple-50">
         <CardHeader className="flex flex-row items-center justify-between pb-3 space-y-0">
           <div>
-            <CardTitle className="text-2xl font-semibold">Employee Management</CardTitle>
-            <CardDescription>
+            <CardTitle className="text-2xl font-semibold text-gray-800">Employee Management</CardTitle>
+            <CardDescription className="text-gray-600">
               Manage your institute's staff members and their permissions
             </CardDescription>
           </div>
           <div className="flex gap-2">
             <Button
-              variant="outline"
+              variant="default"
               onClick={() => setShowAddForm(!showAddForm)}
-              className="gap-2"
+              className="gap-2 bg-blue-600 hover:bg-blue-700"
             >
               {showAddForm ? (
                 <>
@@ -273,8 +567,8 @@ export default function EmployeeManagement() {
             </Button>
             <Button
               variant="outline"
-              onClick={handleBatchUpload}
-              className="gap-2"
+              onClick={handleBatchUploadClick}
+              className="gap-2 border-blue-300 text-blue-600 hover:bg-blue-50"
             >
               <FileUp className="h-4 w-4" />
               <span>Batch Upload</span>
@@ -285,7 +579,7 @@ export default function EmployeeManagement() {
 
       {/* Add Employee Form */}
       {showAddForm && (
-        <Card>
+        <Card className="border-0 shadow-sm">
           <CardHeader>
             <CardTitle className="text-lg">Add New Employee</CardTitle>
             <CardDescription>
@@ -387,6 +681,31 @@ export default function EmployeeManagement() {
                   />
                 </div>
 
+                <FormField
+                  control={form.control}
+                  name="createAccount"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
+                      <FormControl>
+                        <input
+                          type="checkbox"
+                          checked={field.value}
+                          onChange={field.onChange}
+                          className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                      </FormControl>
+                      <div className="space-y-1 leading-none">
+                        <FormLabel>
+                          Also create login account for this employee
+                        </FormLabel>
+                        <p className="text-sm text-muted-foreground">
+                          A temporary password will be generated and emailed to them.
+                        </p>
+                      </div>
+                    </FormItem>
+                  )}
+                />
+
                 <div className="flex justify-end gap-3 pt-2">
                   <Button
                     variant="outline"
@@ -401,7 +720,7 @@ export default function EmployeeManagement() {
                   <Button
                     type="submit"
                     disabled={isSubmitting}
-                    className="gap-2"
+                    className="gap-2 bg-blue-600 hover:bg-blue-700"
                   >
                     {isSubmitting ? (
                       <>
@@ -420,12 +739,27 @@ export default function EmployeeManagement() {
       )}
 
       {/* Employee List */}
-      <Card>
+      <Card className="border-0 shadow-sm">
         <CardHeader>
-          <CardTitle>Employee Directory</CardTitle>
-          <CardDescription>
-            {employees.length} {employees.length === 1 ? 'member' : 'members'} in your institute
-          </CardDescription>
+          <div className="flex justify-between items-center">
+            <div>
+              <CardTitle>Employee Directory</CardTitle>
+              <CardDescription>
+                {employees.length} {employees.length === 1 ? 'member' : 'members'} in your institute
+              </CardDescription>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={downloadTemplate}
+                className="gap-2"
+              >
+                <Download className="h-4 w-4" />
+                Template
+              </Button>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           {isLoading ? (
@@ -446,7 +780,7 @@ export default function EmployeeManagement() {
                   <PlusCircle className="mr-2 h-4 w-4" />
                   Add Employee
                 </Button>
-                <Button variant="outline" onClick={handleBatchUpload}>
+                <Button variant="outline" onClick={handleBatchUploadClick}>
                   <FileUp className="mr-2 h-4 w-4" />
                   Batch Upload
                 </Button>
@@ -455,20 +789,31 @@ export default function EmployeeManagement() {
           ) : (
             <div className="rounded-md border">
               <Table>
-                <TableHeader>
+                <TableHeader className="bg-gray-50">
                   <TableRow>
                     <TableHead className="w-[200px]">Name</TableHead>
                     <TableHead>Contact</TableHead>
                     <TableHead>Role</TableHead>
+                    <TableHead>Status</TableHead>
                     <TableHead>Joined</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {employees.map((employee) => (
-                    <TableRow key={employee.id}>
+                    <TableRow key={employee.id} className="hover:bg-gray-50">
                       <TableCell className="font-medium">
-                        {employee.name}
+                        <div className="flex items-center gap-3">
+                          <div className="flex items-center justify-center h-10 w-10 rounded-full bg-blue-100 text-blue-600 font-semibold">
+                            {employee.name.charAt(0).toUpperCase()}
+                          </div>
+                          <div>
+                            <p className="font-medium">{employee.name}</p>
+                            <p className="text-sm text-muted-foreground">
+                              {employee.role}
+                            </p>
+                          </div>
+                        </div>
                       </TableCell>
                       <TableCell>
                         <div className="flex flex-col">
@@ -481,9 +826,30 @@ export default function EmployeeManagement() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <Badge variant="outline" className="capitalize">
+                        <Badge
+                          variant="outline"
+                          className={`capitalize ${ROLE_OPTIONS.find(r => r.value === employee.role)?.color || 'bg-gray-100 text-gray-800'
+                            }`}
+                        >
                           {employee.role}
                         </Badge>
+                      </TableCell>
+                      <TableCell>
+                        {employee.hasAccount ? (
+                          <Badge variant="default" className="bg-green-100 text-green-800">
+                            Account Active
+                          </Badge>
+                        ) : (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="gap-2"
+                            onClick={() => createAccountForEmployee(employee.id, employee.email)}
+                          >
+                            <UserPlus className="h-4 w-4" />
+                            Create Account
+                          </Button>
+                        )}
                       </TableCell>
                       <TableCell>
                         {employee.createdAt instanceof Timestamp
@@ -500,10 +866,9 @@ export default function EmployeeManagement() {
                               description: "Edit functionality will be available in the next update.",
                             })}
                           >
-                            <Pencil className="h-4 w-4" />
+                            <Pencil className="h-4 w-4 text-blue-600" />
                             <span className="sr-only">Edit</span>
                           </Button>
-
                           <Button
                             variant="ghost"
                             size="icon"
@@ -513,33 +878,10 @@ export default function EmployeeManagement() {
                             {deletingId === employee.id ? (
                               <Loader2 className="h-4 w-4 animate-spin" />
                             ) : (
-                              <Trash2 className="h-4 w-4 text-destructive" />
+                              <Trash2 className="h-4 w-4 text-red-600" />
                             )}
                             <span className="sr-only">Delete</span>
                           </Button>
-
-                          <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  This action cannot be undone. This will permanently remove the employee from your institute.
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                <AlertDialogAction
-                                  onClick={handleDeleteEmployee}
-                                  disabled={deletingId !== null}
-                                >
-                                  {deletingId ? (
-                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                  ) : null}
-                                  Confirm
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
                         </div>
                       </TableCell>
                     </TableRow>

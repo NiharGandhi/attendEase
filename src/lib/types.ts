@@ -20,7 +20,10 @@ export interface Employee {
   email: string;
   role: string; // e.g., 'admin', 'teacher'
   firebaseUid?: string; // Link to Firebase Auth user
-  createdAt?: Timestamp;
+  createdAt?: Timestamp | Date;
+  phone?: string;
+  hasAccount: boolean;
+  updatedAt?: Timestamp | Date
 }
 
 export interface Classroom {
