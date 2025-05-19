@@ -8,10 +8,11 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Camera, Users, CheckCircle, XCircle, Loader2, AlertTriangle, CalendarClock, Search } from 'lucide-react';
+import { Camera, Users, CheckCircle, XCircle, Loader2, AlertTriangle, CalendarClock, Search, Video, Wifi } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
-import type { Student, AttendanceRecord, ScheduledClass, Classroom, DayOfWeek } from '@/lib/types';
+import type { Student, AttendanceRecord, ScheduledClass, Classroom, DayOfWeek, CameraSetup } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { collection, query, where, getDocs, serverTimestamp, addDoc, Timestamp, doc, writeBatch, getDoc as firestoreGetDoc } from 'firebase/firestore';
 import { searchFaceAction, getInstituteFacesetToken } from '@/actions/faceplusplus';
@@ -22,6 +23,8 @@ interface RecognizedStudentInfo extends Student {
   recognizedAt?: Timestamp;
   confidence?: number;
 }
+
+type CameraSourceType = 'default' | 'ip';
 
 export default function AttendanceTracking() {
   const { toast } = useToast();
@@ -37,6 +40,7 @@ export default function AttendanceTracking() {
   const [allClassrooms, setAllClassrooms] = useState<Classroom[]>([]);
   const [selectedClassroomId, setSelectedClassroomId] = useState<string | null>(null);
   const [currentActiveClass, setCurrentActiveClass] = useState<ScheduledClass | null>(null);
+  const [selectedClassroomDetails, setSelectedClassroomDetails] = useState<Classroom | null>(null);
 
   const [studentsForSession, setStudentsForSession] = useState<Student[]>([]);
   const [sessionAttendance, setSessionAttendance] = useState<Map<string, RecognizedStudentInfo>>(new Map());
@@ -47,6 +51,9 @@ export default function AttendanceTracking() {
   const [isLoadingInitialData, setIsLoadingInitialData] = useState(true);
   
   const attendanceIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  const [cameraSourceType, setCameraSourceType] = useState<CameraSourceType>('default');
+  const [ipCameraUrl, setIpCameraUrl] = useState<string>('');
 
 
   useEffect(() => {
@@ -69,14 +76,48 @@ export default function AttendanceTracking() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentActiveClass, instituteId]);
 
+  useEffect(() => {
+    const classroom = allClassrooms.find(c => c.id === selectedClassroomId);
+    setSelectedClassroomDetails(classroom || null);
+    // Potentially pre-fill cameraSourceType and ipCameraUrl if classroom.cameraSetup exists
+    if (classroom?.cameraSetup?.type) {
+        setCameraSourceType(classroom.cameraSetup.type);
+        if (classroom.cameraSetup.type === 'ip' && classroom.cameraSetup.ipCameraUrls && classroom.cameraSetup.ipCameraUrls.length > 0) {
+            setIpCameraUrl(classroom.cameraSetup.ipCameraUrls[0]); // Default to first IP camera URL
+        }
+    } else {
+        setCameraSourceType('default');
+        setIpCameraUrl('');
+    }
+  }, [selectedClassroomId, allClassrooms]);
+
 
   useEffect(() => {
     const getCameraPermission = async () => {
+      if (cameraSourceType === 'ip') {
+        setHasCameraPermission(true); // Assume IP camera is accessible; actual check would be more complex
+        if (videoRef.current && ipCameraUrl) {
+          // Basic attempt to set IP camera stream. Robust IP camera streaming is complex.
+          // This is a placeholder and likely won't work for most IP cameras without specific libraries or backend proxy.
+          try {
+            // videoRef.current.src = ipCameraUrl; // This is often not enough for IP RTSP/etc streams
+            console.warn("IP Camera selected. Ensure videoRef can handle the stream URL: ", ipCameraUrl);
+            toast({title: "IP Camera Mode", description: "Displaying IP camera stream is a complex feature and may require specific player or backend integration. Current implementation is a placeholder."})
+          } catch (error) {
+             console.error("Error setting IP camera source:", error);
+             setHasCameraPermission(false);
+             toast({variant: "destructive", title: "IP Camera Error", description: "Could not set IP camera source."});
+          }
+        }
+        return;
+      }
+      // Default camera logic
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true });
         setHasCameraPermission(true);
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
+          videoRef.current.src = ""; // Clear src if previously set for IP cam
         }
       } catch (error) {
         console.error('Error accessing camera:', error);
@@ -90,8 +131,8 @@ export default function AttendanceTracking() {
     };
     getCameraPermission();
 
-    return () => {
-        if (videoRef.current && videoRef.current.srcObject) {
+    return () => { // Cleanup
+        if (videoRef.current && videoRef.current.srcObject && cameraSourceType === 'default') {
             const stream = videoRef.current.srcObject as MediaStream;
             stream.getTracks().forEach(track => track.stop());
         }
@@ -100,7 +141,7 @@ export default function AttendanceTracking() {
         }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [cameraSourceType, ipCameraUrl]); // Re-run when camera source type or IP URL changes
 
   async function fetchFacesetToken() {
     if (!instituteId) return;
@@ -132,7 +173,7 @@ export default function AttendanceTracking() {
         return { 
           ...data, 
           id: d.id, 
-          classroomDiplayName: classroom ? `${classroom.roomNumber} - ${classroom.section}`: 'N/A' 
+          classroomDiplayName: classroom ? `${classroom.building ? classroom.building + ' - ' : ''}${classroom.roomNumber} - ${classroom.section}`: 'N/A' 
         };
       });
       setAllScheduledClasses(fetchedScheduledClasses);
@@ -228,6 +269,11 @@ export default function AttendanceTracking() {
       setIsProcessing(false);
       return;
     }
+     if (cameraSourceType === 'ip' && !ipCameraUrl) {
+      toast({variant: 'destructive', title: "IP Camera Error", description: "IP Camera URL is not set."});
+      setIsProcessing(false);
+      return;
+    }
     setIsProcessing(true);
 
     const video = videoRef.current;
@@ -282,6 +328,10 @@ export default function AttendanceTracking() {
         toast({ variant: "destructive", title: "Configuration Error", description: "Institute FaceSet token not found." });
         return;
     }
+     if (cameraSourceType === 'ip' && !ipCameraUrl) {
+        toast({variant: 'destructive', title: "IP Camera Error", description: "Please enter a valid IP Camera URL."});
+        return;
+    }
     setIsTracking(true);
     const initialAttendance = new Map<string, RecognizedStudentInfo>();
     studentsForSession.forEach(student => {
@@ -333,7 +383,7 @@ export default function AttendanceTracking() {
     toast({ title: 'Attendance Tracking Stopped' });
   };
 
-  if (!instituteId && !isLoadingInitialData) { // Check isLoadingInitialData as well
+  if (!instituteId && !isLoadingInitialData) { 
     return <p className="text-destructive text-center p-4">Institute ID not found.</p>;
   }
   
@@ -341,7 +391,7 @@ export default function AttendanceTracking() {
 
   return (
     <div className="space-y-6">
-      {!instituteFacesetToken && !isLoadingInitialData && ( // Check isLoadingInitialData
+      {!instituteFacesetToken && !isLoadingInitialData && ( 
          <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
           <AlertTitle>Facial Recognition Not Configured</AlertTitle>
@@ -353,26 +403,78 @@ export default function AttendanceTracking() {
       <Card className="shadow-xl">
         <CardHeader>
           <CardTitle className="text-2xl flex items-center"><Camera className="mr-2 h-6 w-6 text-primary"/>Live Attendance Tracking</CardTitle>
-          <CardDescription>Select a classroom to automatically find the current class and begin attendance.</CardDescription>
+          <CardDescription>
+            Select a classroom and camera source. The system will attempt to find the current class for attendance.
+            Support for multiple cameras per classroom is a planned feature.
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid md:grid-cols-2 gap-6 items-start">
             <div className="space-y-4">
               <Card className="overflow-hidden shadow-md">
-                <video ref={videoRef} className="w-full aspect-video rounded-t-md bg-black" autoPlay muted playsInline />
+                { /* Always render video tag to avoid race conditions with ref, hide if IP cam and no URL */ }
+                <video 
+                    ref={videoRef} 
+                    className={`w-full aspect-video rounded-t-md bg-black ${cameraSourceType === 'ip' && !ipCameraUrl ? 'hidden' : ''}`} 
+                    autoPlay 
+                    muted 
+                    playsInline 
+                    src={cameraSourceType === 'ip' && ipCameraUrl ? ipCameraUrl : undefined} // For IP, directly set src. For default, srcObject is used.
+                />
                 <CardContent className="p-2 bg-muted rounded-b-md">
-                    {hasCameraPermission === false && (
+                    {hasCameraPermission === false && cameraSourceType === 'default' && (
                     <Alert variant="destructive">
-                        <Camera className="h-4 w-4" />
+                        <Video className="h-4 w-4" />
                         <AlertTitle>Camera Access Required</AlertTitle>
                         <AlertDescription>Please allow camera access in your browser settings.</AlertDescription>
                     </Alert>
                     )}
-                    {hasCameraPermission === null && <p className="text-sm text-muted-foreground text-center py-2">Initializing camera...</p>}
+                    {cameraSourceType === 'ip' && !ipCameraUrl && (
+                         <Alert variant="default">
+                            <Wifi className="h-4 w-4" />
+                            <AlertTitle>IP Camera URL Needed</AlertTitle>
+                            <AlertDescription>Please enter the IP Camera URL to start the feed.</AlertDescription>
+                        </Alert>
+                    )}
+                    {hasCameraPermission === null && cameraSourceType === 'default' && <p className="text-sm text-muted-foreground text-center py-2">Initializing camera...</p>}
                 </CardContent>
               </Card>
               <canvas ref={canvasRef} style={{ display: 'none' }} />
               
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <Label htmlFor="camera-source-select">Camera Source</Label>
+                    <Select 
+                        onValueChange={(value) => setCameraSourceType(value as CameraSourceType)} 
+                        value={cameraSourceType}
+                        disabled={isTracking}
+                    >
+                        <SelectTrigger id="camera-source-select">
+                            <SelectValue placeholder="Select camera source" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="default">Default Connected Camera</SelectItem>
+                            <SelectItem value="ip">IP Camera</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
+                {cameraSourceType === 'ip' && (
+                    <div>
+                        <Label htmlFor="ip-camera-url">IP Camera URL</Label>
+                        <Input 
+                            id="ip-camera-url"
+                            type="url"
+                            placeholder="e.g., rtsp://user:pass@ip:port/stream" 
+                            value={ipCameraUrl}
+                            onChange={(e) => setIpCameraUrl(e.target.value)}
+                            disabled={isTracking}
+                        />
+                         <p className="text-xs text-muted-foreground mt-1">Note: Direct browser streaming for some IP camera protocols (like RTSP) might require a backend proxy or specific player libraries.</p>
+                    </div>
+                )}
+              </div>
+
+
               <div className="flex flex-col sm:flex-row gap-2 items-end">
                 <div className="flex-grow">
                   <Label htmlFor="classroom-select">Classroom</Label>
@@ -392,7 +494,7 @@ export default function AttendanceTracking() {
                       ) : (
                         allClassrooms.map(cr => (
                             <SelectItem key={cr.id} value={cr.id!}>
-                                {cr.roomNumber} - {cr.section}
+                                {cr.building ? `${cr.building} - ` : ''}{cr.roomNumber} - {cr.section}
                             </SelectItem>
                         ))
                       )}
@@ -406,7 +508,7 @@ export default function AttendanceTracking() {
 
               <div className="flex flex-col sm:flex-row gap-2">
                 {!isTracking ? (
-                  <Button onClick={startTracking} disabled={!hasCameraPermission || !currentActiveClass || isProcessing || !instituteFacesetToken || isFindingClass || isLoadingInitialData} className="w-full sm:w-auto bg-accent hover:bg-accent/90 text-accent-foreground">
+                  <Button onClick={startTracking} disabled={!hasCameraPermission || !currentActiveClass || isProcessing || !instituteFacesetToken || isFindingClass || isLoadingInitialData || (cameraSourceType === 'ip' && !ipCameraUrl)} className="w-full sm:w-auto bg-accent hover:bg-accent/90 text-accent-foreground">
                     <CalendarClock className="mr-2 h-4 w-4" /> Start Tracking
                   </Button>
                 ) : (

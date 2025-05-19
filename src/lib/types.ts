@@ -26,12 +26,19 @@ export interface Employee {
   updatedAt?: Timestamp;
 }
 
+export interface CameraSetup {
+  type: 'default' | 'ip'; // 'default' for browser/connected, 'ip' for IP cameras
+  ipCameraUrls?: string[]; // Array of URLs if type is 'ip'
+}
+
 export interface Classroom {
   id?: string; // Firestore document ID
   instituteId: string; // Firestore ID of the parent institute
-  roomNumber: string;
-  section: string;
+  building?: string; // e.g., "Engineering Block", "Main Campus - D Wing"
+  roomNumber: string; // e.g., "101", "Lab A"
+  section: string; // e.g., "A", "Morning Batch"
   capacity?: number;
+  cameraSetup?: CameraSetup; // Configuration for cameras in this classroom
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
 }
@@ -63,11 +70,12 @@ export const daysOfWeekArray = Object.values(DayOfWeek);
 
 
 // This interface defines a single scheduled time slot for a class.
-export interface ClassScheduleItem {
-  dayOfWeek: DayOfWeek;
-  startTime: string; // HH:mm format
-  endTime: string;   // HH:mm format
-}
+// A class occurs at ONE specific startTime and endTime, on MULTIPLE selected daysOfWeek.
+// export interface ClassScheduleItem {
+//   dayOfWeek: DayOfWeek;
+//   startTime: string; // HH:mm format
+//   endTime: string;   // HH:mm format
+// }
 
 
 export interface ScheduledClass {
@@ -80,10 +88,9 @@ export interface ScheduledClass {
   teacherId?: string; // Employee ID
   teacherName?: string; // Denormalized for display
   studentIds: string[]; // Array of Student Firestore IDs enrolled in this class
-  // schedule: ClassScheduleItem[]; // Array of recurring schedule items for this class
   daysOfWeek: DayOfWeek[]; 
-  startTime: string; 
-  endTime: string;   
+  startTime: string; // HH:mm format, single start time for all selected daysOfWeek
+  endTime: string;   // HH:mm format, single end time for all selected daysOfWeek
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
 }
@@ -102,7 +109,7 @@ export interface AttendanceRecord {
 // Used for form validation
 export type InstituteFormData = Omit<Institute, 'id' | 'createdAt' | 'adminUid' | 'facesetToken' | 'logoUrl' | 'webhookUrl'> & { adminPassword?: string };
 export type EmployeeFormData = Omit<Employee, 'id' | 'instituteId' | 'createdAt' | 'firebaseUid' | 'updatedAt'>;
-export type ClassroomFormData = Omit<Classroom, 'id' | 'instituteId' | 'createdAt' | 'updatedAt'>;
+export type ClassroomFormData = Omit<Classroom, 'id' | 'instituteId' | 'createdAt' | 'updatedAt' | 'cameraSetup'>; // Exclude cameraSetup from direct form for now
 export type StudentFormData = Omit<Student, 'id' | 'instituteId' | 'imageUrl' | 'faceToken' | 'createdAt' | 'updatedAt'>;
 
 
@@ -150,4 +157,3 @@ export function checkScheduleConflict(
     
     return timeOverlap; // Conflict if there's a common day AND time overlap
 }
-
