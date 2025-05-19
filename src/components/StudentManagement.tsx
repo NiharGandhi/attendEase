@@ -1,7 +1,7 @@
 
 "use client";
 
-import type { Student, StudentFormData } from '@/lib/types';
+import type { Student, StudentFormData, ScheduledClass, Classroom, Employee } from '@/lib/types';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
@@ -12,11 +12,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
 import { db, storage } from '@/lib/firebase'; 
-import { addDoc, collection, query, where, getDocs, serverTimestamp, Timestamp, updateDoc, doc } from 'firebase/firestore'; // Removed getDoc as it's not used directly here
+import { addDoc, collection, query, where, getDocs, serverTimestamp, Timestamp, updateDoc, doc, writeBatch, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { useSearchParams } from 'next/navigation';
 import React, { useEffect, useState, useRef } from 'react';
-import { FileUp, PlusCircle, UploadCloud, Trash2, UserCircle2, AlertTriangle, UsersRound, Edit3 as EditIcon } from 'lucide-react'; // Renamed Edit3 to EditIcon
+import { FileUp, PlusCircle, UploadCloud, Trash2, UserCircle2, AlertTriangle, UsersRound, Edit3 as EditIcon } from 'lucide-react';
 import Image from 'next/image';
 import {
   Dialog,
@@ -30,6 +30,9 @@ import {
 } from "@/components/ui/dialog"
 import { detectFaceAction, addFaceToFaceSetAction, getInstituteFacesetToken } from '@/actions/faceplusplus';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Checkbox } from '@/components/ui/checkbox';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Label } from '@/components/ui/label';
 
 
 const studentFormSchema = z.object({
@@ -57,6 +60,14 @@ export default function StudentManagement() {
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const [instituteFacesetToken, setInstituteFacesetToken] = useState<string | null>(null);
+
+  // State for Manage Enrollments Dialog
+  const [isEnrollmentDialogOpen, setIsEnrollmentDialogOpen] = useState(false);
+  const [selectedStudentForEnrollment, setSelectedStudentForEnrollment] = useState<Student | null>(null);
+  const [allInstituteClasses, setAllInstituteClasses] = useState<ScheduledClass[]>([]);
+  const [classEnrollments, setClassEnrollments] = useState<Set<string>>(new Set());
+  const [isLoadingEnrollmentData, setIsLoadingEnrollmentData] = useState(false);
+  const [isSubmittingEnrollments, setIsSubmittingEnrollments] = useState(false);
 
 
   const form = useForm<z.infer<typeof studentFormSchema>>({
@@ -136,7 +147,6 @@ export default function StudentManagement() {
 
       if (editingStudent && editingStudent.id) {
         const studentDocRef = doc(db, "students", editingStudent.id);
-        // Preserve existing imageUrl and faceToken if not being changed by this form
         studentData.imageUrl = editingStudent.imageUrl; 
         studentData.faceToken = editingStudent.faceToken;
         studentData.updatedAt = serverTimestamp();
@@ -222,9 +232,109 @@ export default function StudentManagement() {
     toast({ title: "Batch Upload Photos", description: "Batch image upload for multiple students (e.g., ZIP file) is coming soon!"});
   }
 
-  const handleManageEnrollments = (student: Student) => {
-    toast({ title: "Manage Enrollments", description: `Functionality to manage class enrollments for ${student.name} is coming soon.`});
-  }
+  const handleOpenEnrollmentDialog = async (student: Student) => {
+    setSelectedStudentForEnrollment(student);
+    setIsLoadingEnrollmentData(true);
+
+    if (!instituteId) {
+        setIsLoadingEnrollmentData(false);
+        toast({ variant: 'destructive', title: 'Error', description: 'Institute ID is missing for enrollment.' });
+        return;
+    }
+
+    try {
+        const classQuery = query(collection(db, 'scheduledClasses'), where('instituteId', '==', instituteId));
+        const classroomQuery = query(collection(db, 'classrooms'), where('instituteId', '==', instituteId));
+        const employeeQuery = query(collection(db, 'employees'), where('instituteId', '==', instituteId), where('role', '==', 'teacher'));
+
+        const [classSnap, classroomSnap, employeeSnap] = await Promise.all([
+            getDocs(classQuery),
+            getDocs(classroomQuery),
+            getDocs(employeeQuery),
+        ]);
+
+        const fetchedClassrooms = classroomSnap.docs.map(d => ({ id: d.id, ...d.data() } as Classroom));
+        const fetchedTeachers = employeeSnap.docs.map(d => ({ id: d.id, ...d.data() } as Employee));
+
+        const schedClasses = classSnap.docs.map(d => {
+            const data = d.data() as ScheduledClass;
+            const classroom = fetchedClassrooms.find(c => c.id === data.classroomId);
+            const teacher = fetchedTeachers.find(t => t.id === data.teacherId);
+            return {
+                id: d.id,
+                ...data,
+                classroomDiplayName: classroom ? `${classroom.roomNumber} - ${classroom.section}` : (data.classroomDiplayName || 'N/A'),
+                teacherName: teacher ? teacher.name : (data.teacherName || 'N/A')
+            } as ScheduledClass;
+        });
+        setAllInstituteClasses(schedClasses);
+
+        const currentEnrollments = new Set<string>();
+        schedClasses.forEach(sc => {
+            if (sc.studentIds?.includes(student.id!)) {
+                currentEnrollments.add(sc.id!);
+            }
+        });
+        setClassEnrollments(currentEnrollments);
+        setIsEnrollmentDialogOpen(true);
+
+    } catch (error) {
+        console.error("Error fetching data for enrollment management:", error);
+        toast({ variant: 'destructive', title: 'Error', description: 'Could not load class data for enrollment.' });
+    } finally {
+        setIsLoadingEnrollmentData(false);
+    }
+  };
+
+  const handleEnrollmentChange = (classId: string, isEnrolled: boolean) => {
+    setClassEnrollments(prev => {
+        const newEnrollments = new Set(prev);
+        if (isEnrolled) {
+            newEnrollments.add(classId);
+        } else {
+            newEnrollments.delete(classId);
+        }
+        return newEnrollments;
+    });
+  };
+
+  const handleSaveEnrollments = async () => {
+    if (!selectedStudentForEnrollment || !selectedStudentForEnrollment.id || !instituteId) {
+        toast({ variant: 'destructive', title: 'Save Error', description: 'Student or Institute ID missing.' });
+        return;
+    }
+    setIsSubmittingEnrollments(true);
+
+    const studentId = selectedStudentForEnrollment.id;
+    const batch = writeBatch(db);
+
+    allInstituteClasses.forEach(sc => {
+        if (!sc.id) return;
+        const isNowEnrolledInDialog = classEnrollments.has(sc.id);
+        const wasOriginallyEnrolled = sc.studentIds?.includes(studentId);
+
+        if (isNowEnrolledInDialog && !wasOriginallyEnrolled) {
+            const classRef = doc(db, 'scheduledClasses', sc.id);
+            batch.update(classRef, { studentIds: arrayUnion(studentId) });
+        } else if (!isNowEnrolledInDialog && wasOriginallyEnrolled) {
+            const classRef = doc(db, 'scheduledClasses', sc.id);
+            batch.update(classRef, { studentIds: arrayRemove(studentId) });
+        }
+    });
+
+    try {
+        await batch.commit();
+        toast({ title: "Enrollments Updated", description: `${selectedStudentForEnrollment.name}'s class schedule has been updated.` });
+        setIsEnrollmentDialogOpen(false);
+        // Optionally, re-fetch students if enrollment count affects display on this page
+        // fetchStudents(); 
+    } catch (error) {
+        console.error("Error updating enrollments:", error);
+        toast({ variant: 'destructive', title: 'Update Failed', description: 'Could not save enrollment changes.' });
+    } finally {
+        setIsSubmittingEnrollments(false);
+    }
+  };
 
 
   if (!instituteId) return <p className="text-destructive text-center p-4">Institute ID not found.</p>;
@@ -360,7 +470,7 @@ export default function StudentManagement() {
                                 </DialogFooter>
                             </DialogContent>
                         </Dialog>
-                        <Button variant="outline" size="icon" onClick={() => handleManageEnrollments(student)} title="Manage Enrollments">
+                        <Button variant="outline" size="icon" onClick={() => handleOpenEnrollmentDialog(student)} title="Manage Enrollments">
                             <UsersRound className="h-4 w-4" />
                         </Button>
                          <Button variant="ghost" size="icon" onClick={() => handleEdit(student)} title="Edit Student">
@@ -377,6 +487,53 @@ export default function StudentManagement() {
           )}
         </CardContent>
       </Card>
+
+      {/* Enrollment Management Dialog */}
+      <Dialog open={isEnrollmentDialogOpen} onOpenChange={setIsEnrollmentDialogOpen}>
+        <DialogContent className="sm:max-w-lg">
+            <DialogHeader>
+                <DialogTitle>Manage Enrollments for {selectedStudentForEnrollment?.name}</DialogTitle>
+                <DialogDescription>Select classes to enroll or unenroll the student.</DialogDescription>
+            </DialogHeader>
+            {isLoadingEnrollmentData ? (
+                <div className="flex justify-center items-center h-40"><p>Loading class data...</p></div>
+            ) : allInstituteClasses.length === 0 ? (
+                <p className="text-center text-muted-foreground py-4">No scheduled classes found for this institute.</p>
+            ) : (
+                <ScrollArea className="h-72 my-4 pr-6">
+                    <div className="space-y-3">
+                    {allInstituteClasses.map(sc => (
+                        <div key={sc.id} className="flex items-center space-x-3 p-2 border rounded-md hover:bg-muted/50">
+                            <Checkbox
+                                id={`enroll-${sc.id}`}
+                                checked={classEnrollments.has(sc.id!)}
+                                onCheckedChange={(checked) => handleEnrollmentChange(sc.id!, !!checked)}
+                                className="mt-1 self-start"
+                            />
+                            <Label htmlFor={`enroll-${sc.id}`} className="flex-1 text-sm font-medium leading-tight cursor-pointer">
+                                {sc.subjectName} {sc.subjectCode && `(${sc.subjectCode})`}
+                                <span className="block text-xs text-muted-foreground font-normal">
+                                    {sc.classroomDiplayName} | {sc.teacherName || 'No Teacher'}
+                                </span>
+                                <span className="block text-xs text-muted-foreground font-normal">
+                                    {sc.daysOfWeek?.join(', ')} @ {sc.startTime} - {sc.endTime}
+                                </span>
+                            </Label>
+                        </div>
+                    ))}
+                    </div>
+                </ScrollArea>
+            )}
+            <DialogFooter>
+                <Button variant="outline" onClick={() => setIsEnrollmentDialogOpen(false)} disabled={isSubmittingEnrollments}>Cancel</Button>
+                <Button onClick={handleSaveEnrollments} disabled={isSubmittingEnrollments || isLoadingEnrollmentData || allInstituteClasses.length === 0}>
+                    {isSubmittingEnrollments ? "Saving..." : "Save Enrollments"}
+                </Button>
+            </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
     </div>
   );
 }
+
