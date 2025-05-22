@@ -313,11 +313,13 @@ export default function ClassroomManagement() {
                                     <FormItem>
                                         <FormLabel>IP Camera URLs</FormLabel>
                                         <FormControl>
-                                            <Textarea
-                                                placeholder="Enter IP camera URLs, one per line."
-                                                {...field}
-                                                value={field.value ?? ''}
-                                            />
+                                            <div> {/* Wrapper div for Textarea */}
+                                                <Textarea
+                                                    placeholder="Enter IP camera URLs, one per line."
+                                                    {...field}
+                                                    value={field.value ?? ''}
+                                                />
+                                            </div>
                                         </FormControl>
                                         <FormDescription>Enter each IP camera URL on a new line. Ensure these are accessible by the attendance system.</FormDescription>
                                         <FormMessage />
