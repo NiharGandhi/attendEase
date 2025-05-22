@@ -315,14 +315,14 @@ export default function ClassroomManagement() {
                                     <FormItem>
                                         <FormLabel>IP Camera URLs</FormLabel>
                                         <FormControl>
-                                            <Textarea 
-                                                placeholder="Enter IP camera URLs, one per line. e.g., rtsp://user:pass@ip:port/stream" 
-                                                {...field} 
-                                                rows={3}
+                                            {/* DIAGNOSTIC CHANGE: Textarea replaced with Input */}
+                                            <Input
+                                                placeholder="Enter IP camera URLs (testing with Input)"
+                                                {...field}
                                                 value={field.value ?? ''}
                                             />
                                         </FormControl>
-                                        <FormDescription>Enter each IP camera URL on a new line. Ensure these are accessible by the attendance system.</FormDescription>
+                                        <FormDescription>Enter each IP camera URL on a new line (if using Textarea later). Ensure these are accessible by the attendance system.</FormDescription>
                                         <FormMessage />
                                     </FormItem>
                                     )}
