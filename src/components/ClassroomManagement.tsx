@@ -202,9 +202,8 @@ export default function ClassroomManagement() {
         const scheduleSnapshot = await getDocs(q);
         const schedules = scheduleSnapshot.docs.map(doc => ({id: doc.id, ...doc.data()} as ScheduledClass));
         
-        // Sort schedules by day, then by start time
         schedules.sort((a, b) => {
-            const dayIndexA = daysOfWeekArray.indexOf(a.daysOfWeek[0]); // Assuming first day for primary sort, or adjust
+            const dayIndexA = daysOfWeekArray.indexOf(a.daysOfWeek[0]);
             const dayIndexB = daysOfWeekArray.indexOf(b.daysOfWeek[0]);
             if (dayIndexA !== dayIndexB) return dayIndexA - dayIndexB;
             return a.startTime.localeCompare(b.startTime);
@@ -308,21 +307,19 @@ export default function ClassroomManagement() {
                             />
                             {form.watch('cameraSetupType') === 'ip' && (
                                 <FormField
-                                    key="ipCameraUrlsInput" // Added key here
                                     control={form.control}
                                     name="ipCameraUrlsInput"
                                     render={({ field }) => (
                                     <FormItem>
                                         <FormLabel>IP Camera URLs</FormLabel>
                                         <FormControl>
-                                            {/* DIAGNOSTIC CHANGE: Textarea replaced with Input */}
-                                            <Input
-                                                placeholder="Enter IP camera URLs (testing with Input)"
+                                            <Textarea
+                                                placeholder="Enter IP camera URLs, one per line."
                                                 {...field}
                                                 value={field.value ?? ''}
                                             />
                                         </FormControl>
-                                        <FormDescription>Enter each IP camera URL on a new line (if using Textarea later). Ensure these are accessible by the attendance system.</FormDescription>
+                                        <FormDescription>Enter each IP camera URL on a new line. Ensure these are accessible by the attendance system.</FormDescription>
                                         <FormMessage />
                                     </FormItem>
                                     )}
