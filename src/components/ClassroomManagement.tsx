@@ -281,8 +281,8 @@ export default function ClassroomManagement() {
                     <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 p-4 border rounded-md">
                     <div className="grid md:grid-cols-2 gap-4">
                         <FormField control={form.control} name="building" render={({ field }) => ( <FormItem> <FormLabel>Building / Wing (Optional)</FormLabel> <FormControl><Input placeholder="e.g., Main Building, Block D" {...field} value={field.value ?? ''} /></FormControl> <FormMessage /> </FormItem> )} />
-                        <FormField control={form.control} name="roomNumber" render={({ field }) => ( <FormItem> <FormLabel>Room Number / Name</FormLabel> <FormControl><Input placeholder="e.g., 101, Lab A, D114" {...field} /></FormControl> <FormMessage /> </FormItem> )} />
-                        <FormField control={form.control} name="section" render={({ field }) => ( <FormItem> <FormLabel>Section</FormLabel> <FormControl><Input placeholder="e.g., A, Morning Batch" {...field} /></FormControl> <FormMessage /> </FormItem> )} />
+                        <FormField control={form.control} name="roomNumber" render={({ field }) => ( <FormItem> <FormLabel>Room Number / Name</FormLabel> <FormControl><Input placeholder="e.g., 101, Lab A, D114" {...field} value={field.value ?? ''} /></FormControl> <FormMessage /> </FormItem> )} />
+                        <FormField control={form.control} name="section" render={({ field }) => ( <FormItem> <FormLabel>Section</FormLabel> <FormControl><Input placeholder="e.g., A, Morning Batch" {...field} value={field.value ?? ''} /></FormControl> <FormMessage /> </FormItem> )} />
                         <FormField control={form.control} name="capacity" render={({ field }) => ( <FormItem> <FormLabel>Capacity (Optional)</FormLabel> <FormControl> <Input type="number" placeholder="e.g., 50" {...field} value={field.value ?? ''} onChange={e => { const val = e.target.value; field.onChange(val === '' ? undefined : Number(val)); }} /> </FormControl> <FormMessage /> </FormItem> )} />
                     </div>
                     
@@ -435,3 +435,4 @@ export default function ClassroomManagement() {
     </div>
   );
 }
+
