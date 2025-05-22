@@ -79,13 +79,16 @@ export default function AttendanceTracking() {
   useEffect(() => {
     const classroom = allClassrooms.find(c => c.id === selectedClassroomId);
     setSelectedClassroomDetails(classroom || null);
-    // Potentially pre-fill cameraSourceType and ipCameraUrl if classroom.cameraSetup exists
+    
     if (classroom?.cameraSetup?.type) {
         setCameraSourceType(classroom.cameraSetup.type);
         if (classroom.cameraSetup.type === 'ip' && classroom.cameraSetup.ipCameraUrls && classroom.cameraSetup.ipCameraUrls.length > 0) {
             setIpCameraUrl(classroom.cameraSetup.ipCameraUrls[0]); // Default to first IP camera URL
+        } else {
+            setIpCameraUrl(''); // Clear if not IP or no URLs
         }
     } else {
+        // Fallback to default if no specific setup in classroom data or classroom not found
         setCameraSourceType('default');
         setIpCameraUrl('');
     }
@@ -95,19 +98,21 @@ export default function AttendanceTracking() {
   useEffect(() => {
     const getCameraPermission = async () => {
       if (cameraSourceType === 'ip') {
-        setHasCameraPermission(true); // Assume IP camera is accessible; actual check would be more complex
+        setHasCameraPermission(true); 
         if (videoRef.current && ipCameraUrl) {
-          // Basic attempt to set IP camera stream. Robust IP camera streaming is complex.
-          // This is a placeholder and likely won't work for most IP cameras without specific libraries or backend proxy.
           try {
-            // videoRef.current.src = ipCameraUrl; // This is often not enough for IP RTSP/etc streams
-            console.warn("IP Camera selected. Ensure videoRef can handle the stream URL: ", ipCameraUrl);
-            toast({title: "IP Camera Mode", description: "Displaying IP camera stream is a complex feature and may require specific player or backend integration. Current implementation is a placeholder."})
+            console.warn("IP Camera selected. Attempting to set src: ", ipCameraUrl);
+             videoRef.current.src = ipCameraUrl; 
+             videoRef.current.srcObject = null; // Clear srcObject if previously set
+            toast({title: "IP Camera Mode", description: "Displaying IP camera. Ensure the URL is a direct video stream."})
           } catch (error) {
              console.error("Error setting IP camera source:", error);
              setHasCameraPermission(false);
-             toast({variant: "destructive", title: "IP Camera Error", description: "Could not set IP camera source."});
+             toast({variant: "destructive", title: "IP Camera Error", description: "Could not set IP camera source. Check URL and browser compatibility."});
           }
+        } else if (videoRef.current) {
+            videoRef.current.src = ""; // Clear src if no ipCameraUrl
+            videoRef.current.srcObject = null;
         }
         return;
       }
@@ -197,6 +202,7 @@ export default function AttendanceTracking() {
     }
 
     try {
+        // Fetch only students who have a faceToken
         const studentDetailsPromises = activeClass.studentIds.map(studentId =>
             firestoreGetDoc(doc(db, "students", studentId))
         );
@@ -248,6 +254,8 @@ export default function AttendanceTracking() {
       setCurrentActiveClass(potentialClasses[0]);
       toast({ title: 'Class Found', description: `Current class: ${potentialClasses[0].subjectName} in ${potentialClasses[0].classroomDiplayName}` });
     } else if (potentialClasses.length > 1) {
+      // If multiple classes, could prompt user to select, or pick first one as default.
+      // For simplicity, picking the first one.
       setCurrentActiveClass(potentialClasses[0]); 
       toast({ variant: 'default', title: 'Multiple Classes Found', description: `Multiple classes ongoing. Selected ${potentialClasses[0].subjectName}. Please verify.` });
     } else {
@@ -292,6 +300,7 @@ export default function AttendanceTracking() {
         const matchedStudent = studentsForSession.find(s => s.faceToken === searchResult.faceToken);
         if (matchedStudent && matchedStudent.id) {
           const existingEntry = newSessionAttendance.get(matchedStudent.id);
+          // Mark present only if not already marked present
           if (!existingEntry || existingEntry.status !== 'present') {
             newSessionAttendance.set(matchedStudent.id, {
               ...matchedStudent,
@@ -303,6 +312,7 @@ export default function AttendanceTracking() {
           }
         }
       } else if (searchResult.error && searchResult.error !== 'No confident match found.' && searchResult.error !== 'No faces detected in the search image.') { 
+        // Don't toast for "no match" or "no faces detected" as these are expected during normal operation
         toast({ variant: 'destructive', title: 'Recognition Error', description: searchResult.error || 'Face search failed.' });
       }
       
@@ -333,6 +343,7 @@ export default function AttendanceTracking() {
         return;
     }
     setIsTracking(true);
+    // Reset attendance status for a new session, keeping student details
     const initialAttendance = new Map<string, RecognizedStudentInfo>();
     studentsForSession.forEach(student => {
       if(student.id) {
@@ -341,8 +352,8 @@ export default function AttendanceTracking() {
     });
     setSessionAttendance(initialAttendance);
 
-    captureFrameAndRecognize(); 
-    attendanceIntervalRef.current = setInterval(captureFrameAndRecognize, 30 * 1000); 
+    captureFrameAndRecognize(); // Initial capture
+    attendanceIntervalRef.current = setInterval(captureFrameAndRecognize, 30 * 1000); // Capture every 30 seconds
     toast({ title: 'Attendance Tracking Started', description: `For: ${currentActiveClass.subjectName}` });
   };
 
@@ -353,12 +364,14 @@ export default function AttendanceTracking() {
       attendanceIntervalRef.current = null;
     }
     
+    // Save final attendance
     if (instituteId && currentActiveClass && sessionAttendance.size > 0) {
         const batch = writeBatch(db);
-        const attendanceDate = new Date(); 
+        const attendanceDate = new Date(); // Common timestamp for this batch
         
         sessionAttendance.forEach((studentInfo, studentId) => {
-            if (studentInfo.status === 'present') {
+            // Only record 'present' students, or all with their status
+            if (studentInfo.status === 'present') { // Or adjust logic if 'absent' needs to be recorded explicitly
                 const recordRef = doc(collection(db, 'attendanceRecords'));
                 const attendanceData: Omit<AttendanceRecord, 'id'> = {
                     instituteId,
@@ -366,7 +379,7 @@ export default function AttendanceTracking() {
                     studentFirebaseId: studentId,
                     timestamp: Timestamp.fromDate(attendanceDate), 
                     status: 'present',
-                    recognizedAt: studentInfo.recognizedAt || serverTimestamp() as Timestamp,
+                    recognizedAt: studentInfo.recognizedAt || serverTimestamp() as Timestamp, // Use recognized time or session end time
                     method: 'facial_recognition'
                 };
                 batch.set(recordRef, attendanceData);
@@ -404,22 +417,20 @@ export default function AttendanceTracking() {
         <CardHeader>
           <CardTitle className="text-2xl flex items-center"><Camera className="mr-2 h-6 w-6 text-primary"/>Live Attendance Tracking</CardTitle>
           <CardDescription>
-            Select a classroom and camera source. The system will attempt to find the current class for attendance.
-            Support for multiple cameras per classroom is a planned feature.
+            Select a classroom. Camera settings will be based on classroom configuration.
+            The system will attempt to find the current class for attendance.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid md:grid-cols-2 gap-6 items-start">
             <div className="space-y-4">
               <Card className="overflow-hidden shadow-md">
-                { /* Always render video tag to avoid race conditions with ref, hide if IP cam and no URL */ }
                 <video 
                     ref={videoRef} 
                     className={`w-full aspect-video rounded-t-md bg-black ${cameraSourceType === 'ip' && !ipCameraUrl ? 'hidden' : ''}`} 
                     autoPlay 
                     muted 
                     playsInline 
-                    src={cameraSourceType === 'ip' && ipCameraUrl ? ipCameraUrl : undefined} // For IP, directly set src. For default, srcObject is used.
                 />
                 <CardContent className="p-2 bg-muted rounded-b-md">
                     {hasCameraPermission === false && cameraSourceType === 'default' && (
@@ -433,7 +444,7 @@ export default function AttendanceTracking() {
                          <Alert variant="default">
                             <Wifi className="h-4 w-4" />
                             <AlertTitle>IP Camera URL Needed</AlertTitle>
-                            <AlertDescription>Please enter the IP Camera URL to start the feed.</AlertDescription>
+                            <AlertDescription>Classroom not configured for IP camera or URL missing. Enter URL below or select a classroom with IP camera setup.</AlertDescription>
                         </Alert>
                     )}
                     {hasCameraPermission === null && cameraSourceType === 'default' && <p className="text-sm text-muted-foreground text-center py-2">Initializing camera...</p>}
@@ -443,7 +454,7 @@ export default function AttendanceTracking() {
               
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                    <Label htmlFor="camera-source-select">Camera Source</Label>
+                    <Label htmlFor="camera-source-select">Camera Source (Override)</Label>
                     <Select 
                         onValueChange={(value) => setCameraSourceType(value as CameraSourceType)} 
                         value={cameraSourceType}
@@ -460,7 +471,7 @@ export default function AttendanceTracking() {
                 </div>
                 {cameraSourceType === 'ip' && (
                     <div>
-                        <Label htmlFor="ip-camera-url">IP Camera URL</Label>
+                        <Label htmlFor="ip-camera-url">IP Camera URL (Override)</Label>
                         <Input 
                             id="ip-camera-url"
                             type="url"
@@ -469,7 +480,7 @@ export default function AttendanceTracking() {
                             onChange={(e) => setIpCameraUrl(e.target.value)}
                             disabled={isTracking}
                         />
-                         <p className="text-xs text-muted-foreground mt-1">Note: Direct browser streaming for some IP camera protocols (like RTSP) might require a backend proxy or specific player libraries.</p>
+                         <p className="text-xs text-muted-foreground mt-1">If classroom has IP cameras configured, this will override the first one. For multiple, configure in Classroom Management.</p>
                     </div>
                 )}
               </div>

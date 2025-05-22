@@ -69,15 +69,6 @@ export enum DayOfWeek {
 export const daysOfWeekArray = Object.values(DayOfWeek);
 
 
-// This interface defines a single scheduled time slot for a class.
-// A class occurs at ONE specific startTime and endTime, on MULTIPLE selected daysOfWeek.
-// export interface ClassScheduleItem {
-//   dayOfWeek: DayOfWeek;
-//   startTime: string; // HH:mm format
-//   endTime: string;   // HH:mm format
-// }
-
-
 export interface ScheduledClass {
   id?: string; // Firestore document ID
   instituteId: string;
@@ -109,7 +100,20 @@ export interface AttendanceRecord {
 // Used for form validation
 export type InstituteFormData = Omit<Institute, 'id' | 'createdAt' | 'adminUid' | 'facesetToken' | 'logoUrl' | 'webhookUrl'> & { adminPassword?: string };
 export type EmployeeFormData = Omit<Employee, 'id' | 'instituteId' | 'createdAt' | 'firebaseUid' | 'updatedAt'>;
-export type ClassroomFormData = Omit<Classroom, 'id' | 'instituteId' | 'createdAt' | 'updatedAt' | 'cameraSetup'>; // Exclude cameraSetup from direct form for now
+
+export const classroomFormClientSchema = z.object({
+  building: z.string().optional(),
+  roomNumber: z.string().min(1, { message: "Room number is required." }),
+  section: z.string().min(1, { message: "Section is required." }),
+  capacity: z.coerce.number().positive({ message: "Capacity must be a positive number." }).optional(),
+  cameraSetupType: z.enum(['default', 'ip']).optional(),
+  ipCameraUrlsInput: z.string().optional(), // For textarea input
+});
+export type ClassroomFormClientData = z.infer<typeof classroomFormClientSchema>;
+// Actual data stored in Firestore
+export type ClassroomFormData = Omit<Classroom, 'id' | 'instituteId' | 'createdAt' | 'updatedAt'>;
+
+
 export type StudentFormData = Omit<Student, 'id' | 'instituteId' | 'imageUrl' | 'faceToken' | 'createdAt' | 'updatedAt'>;
 
 
