@@ -305,28 +305,30 @@ export default function ClassroomManagement() {
                                 </FormItem>
                                 )}
                             />
-                            {form.watch('cameraSetupType') === 'ip' && (
-                                <FormField
-                                    control={form.control}
-                                    name="ipCameraUrlsInput"
-                                    render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>IP Camera URLs</FormLabel>
-                                        <FormControl>
-                                            <div> {/* Wrapper div for Textarea */}
-                                                <Textarea
-                                                    placeholder="Enter IP camera URLs, one per line."
-                                                    {...field}
-                                                    value={field.value ?? ''}
-                                                />
-                                            </div>
-                                        </FormControl>
-                                        <FormDescription>Enter each IP camera URL on a new line. Ensure these are accessible by the attendance system.</FormDescription>
-                                        <FormMessage />
-                                    </FormItem>
-                                    )}
-                                />
-                            )}
+                            {form.watch('cameraSetupType') === 'ip' ? (
+                                <React.Fragment key="ipCameraUrlsFormField">
+                                    <FormField
+                                        control={form.control}
+                                        name="ipCameraUrlsInput"
+                                        render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>IP Camera URLs</FormLabel>
+                                            <FormControl>
+                                                <div>
+                                                    <Textarea
+                                                        placeholder="Enter IP camera URLs, one per line."
+                                                        {...field}
+                                                        value={field.value ?? ''}
+                                                    />
+                                                </div>
+                                            </FormControl>
+                                            <FormDescription>Enter each IP camera URL on a new line. Ensure these are accessible by the attendance system.</FormDescription>
+                                            <FormMessage />
+                                        </FormItem>
+                                        )}
+                                    />
+                                </React.Fragment>
+                            ) : null}
                         </div>
                     </Card>
 
@@ -435,4 +437,3 @@ export default function ClassroomManagement() {
     </div>
   );
 }
-
