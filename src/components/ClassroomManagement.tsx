@@ -1,4 +1,3 @@
-
 "use client";
 
 import type { Classroom, ClassroomFormClientData, ClassroomFormData, ScheduledClass, Employee } from '@/lib/types';
@@ -53,21 +52,20 @@ export default function ClassroomManagement() {
   const [isLoadingSchedule, setIsLoadingSchedule] = useState(false);
   const [allTeachers, setAllTeachers] = useState<Employee[]>([]);
 
-
   const form = useForm<ClassroomFormClientData>({
     resolver: zodResolver(classroomFormClientSchema),
     defaultValues: {
       building: '',
       roomNumber: '',
       section: '',
-      capacity: undefined, 
+      capacity: undefined,
       cameraSetupType: 'default',
       ipCameraUrlsInput: '',
     },
   });
 
   useEffect(() => {
-     if (action === 'add' && !editingClassroom) {
+    if (action === 'add' && !editingClassroom) {
       setShowForm(true);
       form.reset({ building: '', roomNumber: '', section: '', capacity: undefined, cameraSetupType: 'default', ipCameraUrlsInput: '' });
     }
@@ -78,7 +76,7 @@ export default function ClassroomManagement() {
       fetchClassrooms();
       fetchTeachers();
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [instituteId]);
 
   async function fetchClassrooms() {
@@ -99,18 +97,17 @@ export default function ClassroomManagement() {
       setIsLoading(false);
     }
   }
-  
+
   async function fetchTeachers() {
-    if(!instituteId) return;
+    if (!instituteId) return;
     try {
       const q = query(collection(db, 'employees'), where('instituteId', '==', instituteId), where('role', '==', 'teacher'));
       const snapshot = await getDocs(q);
-      setAllTeachers(snapshot.docs.map(doc => ({id: doc.id, ...doc.data()} as Employee)));
+      setAllTeachers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Employee)));
     } catch (error) {
       console.error("Error fetching teachers for schedule dialog:", error);
     }
   }
-
 
   const handleEdit = (classroom: Classroom) => {
     setEditingClassroom(classroom);
@@ -144,10 +141,10 @@ export default function ClassroomManagement() {
         section: values.section,
         capacity: values.capacity ? Number(values.capacity) : undefined,
         cameraSetup: {
-            type: values.cameraSetupType || 'default',
-            ipCameraUrls: values.cameraSetupType === 'ip' && values.ipCameraUrlsInput 
-                          ? values.ipCameraUrlsInput.split('\n').map(url => url.trim()).filter(url => url.length > 0) 
-                          : [],
+          type: values.cameraSetupType || 'default',
+          ipCameraUrls: values.cameraSetupType === 'ip' && values.ipCameraUrlsInput
+            ? values.ipCameraUrlsInput.split('\n').map(url => url.trim()).filter(url => url.length > 0)
+            : [],
         },
         instituteId,
       };
@@ -162,11 +159,11 @@ export default function ClassroomManagement() {
         await addDoc(collection(db, 'classrooms'), classroomData);
         toast({ title: 'Classroom Added', description: `Classroom ${values.roomNumber} - ${values.section} has been added.` });
       }
-      
+
       form.reset({ building: '', roomNumber: '', section: '', capacity: undefined, cameraSetupType: 'default', ipCameraUrlsInput: '' });
       setShowForm(false);
       setEditingClassroom(null);
-      fetchClassrooms(); 
+      fetchClassrooms();
     } catch (error) {
       console.error('Error saving classroom:', error);
       toast({ variant: 'destructive', title: 'Error', description: 'Failed to save classroom.' });
@@ -182,9 +179,9 @@ export default function ClassroomManagement() {
     }
     toast({ title: 'Batch Upload Started', description: `Processing ${batchFile.name}. This feature is in development.` });
     console.log("Batch classroom file selected:", batchFile.name);
-    
+
     setBatchFile(null);
-    if(batchFileRef.current) batchFileRef.current.value = "";
+    if (batchFileRef.current) batchFileRef.current.value = "";
     setShowBatchUploadDialog(false);
   };
 
@@ -194,30 +191,29 @@ export default function ClassroomManagement() {
     setShowScheduleDialog(true);
     setIsLoadingSchedule(true);
     try {
-        const q = query(
-            collection(db, 'scheduledClasses'), 
-            where('instituteId', '==', instituteId),
-            where('classroomId', '==', classroom.id)
-        );
-        const scheduleSnapshot = await getDocs(q);
-        const schedules = scheduleSnapshot.docs.map(doc => ({id: doc.id, ...doc.data()} as ScheduledClass));
-        
-        schedules.sort((a, b) => {
-            const dayIndexA = daysOfWeekArray.indexOf(a.daysOfWeek[0]);
-            const dayIndexB = daysOfWeekArray.indexOf(b.daysOfWeek[0]);
-            if (dayIndexA !== dayIndexB) return dayIndexA - dayIndexB;
-            return a.startTime.localeCompare(b.startTime);
-        });
-        
-        setClassroomSchedule(schedules);
+      const q = query(
+        collection(db, 'scheduledClasses'),
+        where('instituteId', '==', instituteId),
+        where('classroomId', '==', classroom.id)
+      );
+      const scheduleSnapshot = await getDocs(q);
+      const schedules = scheduleSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ScheduledClass));
+
+      schedules.sort((a, b) => {
+        const dayIndexA = daysOfWeekArray.indexOf(a.daysOfWeek[0]);
+        const dayIndexB = daysOfWeekArray.indexOf(b.daysOfWeek[0]);
+        if (dayIndexA !== dayIndexB) return dayIndexA - dayIndexB;
+        return a.startTime.localeCompare(b.startTime);
+      });
+
+      setClassroomSchedule(schedules);
     } catch (error) {
-        console.error("Error fetching classroom schedule:", error);
-        toast({ variant: "destructive", title: "Error", description: "Could not fetch schedule for this classroom." });
+      console.error("Error fetching classroom schedule:", error);
+      toast({ variant: "destructive", title: "Error", description: "Could not fetch schedule for this classroom." });
     } finally {
-        setIsLoadingSchedule(false);
+      setIsLoadingSchedule(false);
     }
   };
-
 
   if (!instituteId) {
     return <p className="text-destructive text-center p-4">Institute ID not found. Please ensure you are accessing this page correctly.</p>;
@@ -227,117 +223,176 @@ export default function ClassroomManagement() {
     <div className="space-y-6">
       <Card className="shadow-xl">
         <CardHeader className="flex flex-row items-center justify-between">
-            <div>
-                <CardTitle className="text-2xl">{editingClassroom ? 'Edit Classroom' : 'Manage Classrooms'}</CardTitle>
-                <CardDescription>Define buildings, classrooms, camera setups, sections, and capacities. You can also batch upload or sync from external systems.</CardDescription>
-            </div>
-            <div className="flex flex-wrap gap-2">
-                <Button variant="outline" onClick={() => {
-                if (showForm) {
-                    handleCancelEdit();
-                } else {
-                    setEditingClassroom(null);
-                    form.reset({ building: '', roomNumber: '', section: '', capacity: undefined, cameraSetupType: 'default', ipCameraUrlsInput: ''});
-                    setShowForm(true);
-                }
-                }}>
-                    <PlusCircle className="mr-2 h-4 w-4" /> {showForm ? 'Cancel' : 'Add Classroom'}
+          <div>
+            <CardTitle className="text-2xl">{editingClassroom ? 'Edit Classroom' : 'Manage Classrooms'}</CardTitle>
+            <CardDescription>Define buildings, classrooms, camera setups, sections, and capacities. You can also batch upload or sync from external systems.</CardDescription>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" onClick={() => {
+              if (showForm) {
+                handleCancelEdit();
+              } else {
+                setEditingClassroom(null);
+                form.reset({ building: '', roomNumber: '', section: '', capacity: undefined, cameraSetupType: 'default', ipCameraUrlsInput: '' });
+                setShowForm(true);
+              }
+            }}>
+              <PlusCircle className="mr-2 h-4 w-4" /> {showForm ? 'Cancel' : 'Add Classroom'}
+            </Button>
+            <Dialog open={showBatchUploadDialog} onOpenChange={setShowBatchUploadDialog}>
+              <DialogTrigger asChild>
+                <Button variant="outline">
+                  <UploadCloud className="mr-2 h-4 w-4" /> Batch Upload (CSV)
                 </Button>
-                 <Dialog open={showBatchUploadDialog} onOpenChange={setShowBatchUploadDialog}>
-                    <DialogTrigger asChild>
-                        <Button variant="outline">
-                        <UploadCloud className="mr-2 h-4 w-4" /> Batch Upload (CSV)
-                        </Button>
-                    </DialogTrigger>
-                    <DialogContent>
-                        <DialogHeader>
-                        <DialogTitle>Batch Upload Classrooms</DialogTitle>
-                        <DialogDescription>
-                            Upload a CSV file to add multiple classrooms. Ensure your CSV has columns: `building`, `roomNumber`, `section`, `capacity` (optional).
-                            <br/>This feature is currently in development.
-                        </DialogDescription>
-                        </DialogHeader>
-                        <div className="grid gap-4 py-4">
-                        <div className="grid grid-cols-4 items-center gap-4">
-                            <Label htmlFor="batchFile" className="text-right">CSV File</Label>
-                            <Input id="batchFile" type="file" accept=".csv" className="col-span-3" ref={batchFileRef} onChange={(e) => setBatchFile(e.target.files ? e.target.files[0] : null)} />
-                        </div>
-                        </div>
-                        <DialogFooter>
-                        <DialogClose asChild><Button variant="ghost">Cancel</Button></DialogClose>
-                        <Button onClick={handleBatchClassroomUpload} disabled={!batchFile}>Process File</Button>
-                        </DialogFooter>
-                    </DialogContent>
-                </Dialog>
-                 <Button variant="outline" onClick={() => toast({title: "External Sync", description: "Syncing with external building management APIs is planned for a future update."})} >
-                    <ExternalLink className="mr-2 h-4 w-4" /> Sync External API
-                </Button>
-            </div>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Batch Upload Classrooms</DialogTitle>
+                  <DialogDescription>
+                    Upload a CSV file to add multiple classrooms. Ensure your CSV has columns: `building`, `roomNumber`, `section`, `capacity` (optional).
+                    <br />This feature is currently in development.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="grid gap-4 py-4">
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="batchFile" className="text-right">CSV File</Label>
+                    <Input id="batchFile" type="file" accept=".csv" className="col-span-3" ref={batchFileRef} onChange={(e) => setBatchFile(e.target.files ? e.target.files[0] : null)} />
+                  </div>
+                </div>
+                <DialogFooter>
+                  <DialogClose asChild><Button variant="ghost">Cancel</Button></DialogClose>
+                  <Button onClick={handleBatchClassroomUpload} disabled={!batchFile}>Process File</Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+            <Button variant="outline" onClick={() => toast({ title: "External Sync", description: "Syncing with external building management APIs is planned for a future update." })} >
+              <ExternalLink className="mr-2 h-4 w-4" /> Sync External API
+            </Button>
+          </div>
         </CardHeader>
         {showForm && (
-            <CardContent>
-                <Form {...form}>
-                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 p-4 border rounded-md">
-                    <div className="grid md:grid-cols-2 gap-4">
-                        <FormField control={form.control} name="building" render={({ field }) => ( <FormItem> <FormLabel>Building / Wing (Optional)</FormLabel> <FormControl><Input placeholder="e.g., Main Building, Block D" {...field} value={field.value ?? ''} /></FormControl> <FormMessage /> </FormItem> )} />
-                        <FormField control={form.control} name="roomNumber" render={({ field }) => ( <FormItem> <FormLabel>Room Number / Name</FormLabel> <FormControl><Input placeholder="e.g., 101, Lab A, D114" {...field} value={field.value ?? ''} /></FormControl> <FormMessage /> </FormItem> )} />
-                        <FormField control={form.control} name="section" render={({ field }) => ( <FormItem> <FormLabel>Section</FormLabel> <FormControl><Input placeholder="e.g., A, Morning Batch" {...field} value={field.value ?? ''} /></FormControl> <FormMessage /> </FormItem> )} />
-                        <FormField control={form.control} name="capacity" render={({ field }) => ( <FormItem> <FormLabel>Capacity (Optional)</FormLabel> <FormControl> <Input type="number" placeholder="e.g., 50" {...field} value={field.value ?? ''} onChange={e => { const val = e.target.value; field.onChange(val === '' ? undefined : Number(val)); }} /> </FormControl> <FormMessage /> </FormItem> )} />
-                    </div>
-                    
-                    <Card className="p-4">
-                        <CardTitle className="text-lg mb-2">Camera Setup</CardTitle>
-                        <div className="grid md:grid-cols-2 gap-4">
-                             <FormField
-                                control={form.control}
-                                name="cameraSetupType"
-                                render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>Camera Source Type</FormLabel>
-                                    <Select onValueChange={field.onChange} value={field.value || 'default'}>
-                                    <FormControl><SelectTrigger><SelectValue placeholder="Select camera type" /></SelectTrigger></FormControl>
-                                    <SelectContent>
-                                        <SelectItem value="default">Default Connected Camera</SelectItem>
-                                        <SelectItem value="ip">IP Camera</SelectItem>
-                                    </SelectContent>
-                                    </Select>
-                                    <FormMessage />
-                                </FormItem>
-                                )}
-                            />
-                            {form.watch('cameraSetupType') === 'ip' ? (
-                                <React.Fragment key="ipCameraUrlsFormField">
-                                    <FormField
-                                        control={form.control}
-                                        name="ipCameraUrlsInput"
-                                        render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>IP Camera URLs</FormLabel>
-                                            <FormControl>
-                                                <div>
-                                                    <Textarea
-                                                        placeholder="Enter IP camera URLs, one per line."
-                                                        {...field}
-                                                        value={field.value ?? ''}
-                                                    />
-                                                </div>
-                                            </FormControl>
-                                            <FormDescription>Enter each IP camera URL on a new line. Ensure these are accessible by the attendance system.</FormDescription>
-                                            <FormMessage />
-                                        </FormItem>
-                                        )}
-                                    />
-                                </React.Fragment>
-                            ) : null}
-                        </div>
-                    </Card>
+          <CardContent>
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 p-4 border rounded-md">
+                <div className="grid md:grid-cols-2 gap-4">
+                  <FormField 
+                    control={form.control} 
+                    name="building" 
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Building / Wing (Optional)</FormLabel>
+                        <FormControl>
+                          <Input placeholder="e.g., Main Building, Block D" {...field} value={field.value ?? ''} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} 
+                  />
+                  <FormField 
+                    control={form.control} 
+                    name="roomNumber" 
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Room Number / Name</FormLabel>
+                        <FormControl>
+                          <Input placeholder="e.g., 101, Lab A, D114" {...field} value={field.value ?? ''} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} 
+                  />
+                  <FormField 
+                    control={form.control} 
+                    name="section" 
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Section</FormLabel>
+                        <FormControl>
+                          <Input placeholder="e.g., A, Morning Batch" {...field} value={field.value ?? ''} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} 
+                  />
+                  <FormField 
+                    control={form.control} 
+                    name="capacity" 
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Capacity (Optional)</FormLabel>
+                        <FormControl>
+                          <Input 
+                            type="number" 
+                            placeholder="e.g., 50" 
+                            {...field} 
+                            value={field.value ?? ''} 
+                            onChange={e => {
+                              const val = e.target.value;
+                              field.onChange(val === '' ? undefined : Number(val));
+                            }} 
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} 
+                  />
+                </div>
 
-                    <Button type="submit" className="w-full" disabled={isSubmitting}>
-                        {isSubmitting ? (editingClassroom ? 'Updating...' : 'Adding...') : (editingClassroom ? 'Update Classroom' : 'Add Classroom')}
-                    </Button>
-                    </form>
-                </Form>
-            </CardContent>
+                <Card className="p-4">
+                  <CardTitle className="text-lg mb-2">Camera Setup</CardTitle>
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="cameraSetupType"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Camera Source Type</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value || 'default'}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select camera type" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="default">Default Connected Camera</SelectItem>
+                              <SelectItem value="ip">IP Camera</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    {form.watch('cameraSetupType') === 'ip' && (
+                      <FormField
+                        control={form.control}
+                        name="ipCameraUrlsInput"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>IP Camera URLs</FormLabel>
+                            <FormControl>
+                              <Textarea
+                                placeholder="Enter IP camera URLs, one per line."
+                                {...field}
+                                value={field.value ?? ''}
+                              />
+                            </FormControl>
+                            <FormDescription>
+                              Enter each IP camera URL on a new line. Ensure these are accessible by the attendance system.
+                            </FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    )}
+                  </div>
+                </Card>
+
+                <Button type="submit" className="w-full" disabled={isSubmitting}>
+                  {isSubmitting ? (editingClassroom ? 'Updating...' : 'Adding...') : (editingClassroom ? 'Update Classroom' : 'Add Classroom')}
+                </Button>
+              </form>
+            </Form>
+          </CardContent>
         )}
       </Card>
 
@@ -370,21 +425,21 @@ export default function ClassroomManagement() {
                     <TableCell>{classroom.section}</TableCell>
                     <TableCell>{classroom.capacity || 'N/A'}</TableCell>
                     <TableCell>
-                        {classroom.cameraSetup?.type === 'ip' 
-                            ? `IP (${classroom.cameraSetup.ipCameraUrls?.length || 0} URL/s)`
-                            : 'Default'
-                        }
+                      {classroom.cameraSetup?.type === 'ip'
+                        ? `IP (${classroom.cameraSetup.ipCameraUrls?.length || 0} URL/s)`
+                        : 'Default'
+                      }
                     </TableCell>
                     <TableCell className="text-right space-x-1">
-                        <Button variant="outline" size="icon" onClick={() => handleViewSchedule(classroom)} title="View Classroom Schedule">
-                            <CalendarSearch className="h-4 w-4" />
-                        </Button>
-                        <Button variant="ghost" size="icon" onClick={() => handleEdit(classroom)} title="Edit Classroom">
-                            <Edit3 className="h-4 w-4" />
-                        </Button>
-                        <Button variant="ghost" size="icon" onClick={() => toast({title: "Delete", description: "Delete functionality coming soon."})} title="Delete Classroom">
-                            <Trash2 className="h-4 w-4 text-destructive" /> 
-                        </Button>
+                      <Button variant="outline" size="icon" onClick={() => handleViewSchedule(classroom)} title="View Classroom Schedule">
+                        <CalendarSearch className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon" onClick={() => handleEdit(classroom)} title="Edit Classroom">
+                        <Edit3 className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon" onClick={() => toast({ title: "Delete", description: "Delete functionality coming soon." })} title="Delete Classroom">
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -394,7 +449,7 @@ export default function ClassroomManagement() {
         </CardContent>
       </Card>
 
-       {/* Classroom Schedule Dialog */}
+      {/* Classroom Schedule Dialog */}
       <Dialog open={showScheduleDialog} onOpenChange={setShowScheduleDialog}>
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
