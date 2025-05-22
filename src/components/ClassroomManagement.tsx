@@ -308,6 +308,7 @@ export default function ClassroomManagement() {
                             />
                             {form.watch('cameraSetupType') === 'ip' && (
                                 <FormField
+                                    key="ipCameraUrlsInput" // Added key here
                                     control={form.control}
                                     name="ipCameraUrlsInput"
                                     render={({ field }) => (
